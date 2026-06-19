@@ -511,6 +511,36 @@
           <div class="card-title">Top expense categories this year</div>
           <div id="fy-top-cats"></div>
         </div>
+
+        <!-- YEAR ON YEAR COMPARISON -->
+        <div class="card">
+          <div class="card-title">📊 Year-on-Year Comparison</div>
+          <div class="metrics" id="yoy-metrics" style="margin-bottom:1.25rem;"></div>
+          <div class="chart-box" style="height:260px; margin-bottom:1rem;">
+            <canvas id="yoyBarChart" role="img" aria-label="Year on year comparison bar chart"></canvas>
+          </div>
+          <div class="chart-box" style="height:220px; margin-bottom:1rem;">
+            <canvas id="yoyLineChart" role="img" aria-label="Year on year trend line chart"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📋 FY-wise Summary Table</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Financial Year</th><th>Income</th><th>Expenses</th><th>Investment</th><th>Savings</th><th>Donation</th><th>Net Balance</th><th>Savings Rate</th><th>vs Prev Year</th></tr></thead>
+              <tbody id="yoy-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📈 Category Trends — Top Expenses Across Years</div>
+          <div class="chart-box" style="height:260px;">
+            <canvas id="yoyCatChart" role="img" aria-label="Category trends across years"></canvas>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1313,6 +1343,155 @@ function renderFY() {
       </div>
       <div style="flex:0 0 90px;text-align:right;font-size:13px;font-weight:600;color:var(--red);">${fmt(amt)}</div>
     </div>`).join('') : '<div class="empty"><div class="ei">📊</div>No expense data for this FY</div>';
+
+  // Render Year-on-Year comparison
+  renderYoY(fy, scope);
+}
+
+// ===================== YEAR-ON-YEAR COMPARISON =====================
+let yoyBarChart, yoyLineChart, yoyCatChart;
+
+function getFYTotals(fy, scope) {
+  let data = DB.transactions.filter(t => {
+    const m = t.date.slice(0,7);
+    return m >= fy.start && m <= fy.end;
+  });
+  if (scope === 'me') data = data.filter(t => t.userId === currentUser.id);
+  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0 };
+  data.forEach(t => tots[t.type] = (tots[t.type]||0) + t.amount);
+  return tots;
+}
+
+function renderYoY(currentFY, scope) {
+  const fyList = getFYList();
+  // Get past FYs that have any data, up to 5 years back + current
+  const pastFYs = fyList.filter(fy => fy.start <= currentFY.start).slice(0, 6).reverse();
+
+  const allTots = pastFYs.map(fy => ({ fy, tots: getFYTotals(fy, scope) }));
+  const labels = allTots.map(d => `FY ${d.fy.start.slice(0,4)}-${(parseInt(d.fy.start.slice(0,4))+1).toString().slice(2)}`);
+
+  // YoY metric cards vs previous FY
+  const curIdx = allTots.length - 1;
+  const cur = allTots[curIdx]?.tots;
+  const prev = curIdx > 0 ? allTots[curIdx-1]?.tots : null;
+  function delta(cur, prev, key) {
+    if (!prev || !prev[key]) return '';
+    const pct = Math.round((cur[key] - prev[key]) / prev[key] * 100);
+    const arrow = pct >= 0 ? '▲' : '▼';
+    const col = key === 'Income' ? (pct>=0?'var(--accent)':'var(--red)') : (pct<=0?'var(--accent)':'var(--red)');
+    return `<div class="m-sub" style="color:${col};">${arrow} ${Math.abs(pct)}% vs prev year</div>`;
+  }
+  if (cur) {
+    const net = cur.Income - cur.Expenses - cur.Investment - cur.Savings - cur.Donation;
+    const prevNet = prev ? prev.Income - prev.Expenses - prev.Investment - prev.Savings - prev.Donation : null;
+    const netPct = prevNet ? Math.round((net - prevNet) / Math.abs(prevNet) * 100) : null;
+    document.getElementById('yoy-metrics').innerHTML = `
+      <div class="metric"><div class="m-label">Income</div><div class="m-value m-income">${fmt(cur.Income)}</div>${delta(cur,prev,'Income')}</div>
+      <div class="metric"><div class="m-label">Expenses</div><div class="m-value m-expense">${fmt(cur.Expenses)}</div>${delta(cur,prev,'Expenses')}</div>
+      <div class="metric"><div class="m-label">Investment</div><div class="m-value m-invest">${fmt(cur.Investment)}</div>${delta(cur,prev,'Investment')}</div>
+      <div class="metric"><div class="m-label">Savings</div><div class="m-value m-save">${fmt(cur.Savings)}</div>${delta(cur,prev,'Savings')}</div>
+      <div class="metric"><div class="m-label">Net Balance</div><div class="m-value ${net>=0?'m-net-pos':'m-net-neg'}">${fmt(net)}</div>${netPct!==null?`<div class="m-sub" style="color:${netPct>=0?'var(--accent)':'var(--red)'};">${netPct>=0?'▲':'▼'} ${Math.abs(netPct)}% vs prev year</div>`:''}</div>
+    `;
+  }
+
+  // Grouped bar chart — Income vs Expenses per FY
+  if(yoyBarChart) yoyBarChart.destroy();
+  yoyBarChart = new Chart(document.getElementById('yoyBarChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Income',     data: allTots.map(d=>d.tots.Income),     backgroundColor:'#16A34A' },
+        { label:'Expenses',   data: allTots.map(d=>d.tots.Expenses),   backgroundColor:'#DC2626' },
+        { label:'Investment', data: allTots.map(d=>d.tots.Investment), backgroundColor:'#2563EB' },
+        { label:'Savings',    data: allTots.map(d=>d.tots.Savings),    backgroundColor:'#7C3AED' },
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ font:{size:11} } } },
+      scales:{ y:{ ticks:{ callback: v=>C()+Number(v).toLocaleString('en-IN') }, grid:{color:'rgba(0,0,0,0.05)'} }, x:{grid:{display:false}} } }
+  });
+
+  // Line chart — Net balance trend across FYs
+  const nets = allTots.map(d => d.tots.Income - d.tots.Expenses - d.tots.Investment - d.tots.Savings - d.tots.Donation);
+  const incomes = allTots.map(d => d.tots.Income);
+  const expenses = allTots.map(d => d.tots.Expenses);
+  if(yoyLineChart) yoyLineChart.destroy();
+  yoyLineChart = new Chart(document.getElementById('yoyLineChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Income',  data: incomes,  borderColor:'#16A34A', backgroundColor:'rgba(22,163,74,0.06)',  fill:false, tension:0.4, pointRadius:5 },
+        { label:'Expenses',data: expenses, borderColor:'#DC2626', backgroundColor:'rgba(220,38,38,0.06)',  fill:false, tension:0.4, pointRadius:5 },
+        { label:'Net',     data: nets,     borderColor:'#2563EB', backgroundColor:'rgba(37,99,235,0.08)',  fill:true,  tension:0.4, pointRadius:5, borderDash:[5,3] }
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ font:{size:11} } } },
+      scales:{ y:{ ticks:{ callback: v=>C()+Number(v).toLocaleString('en-IN') }, grid:{color:'rgba(0,0,0,0.05)'} }, x:{grid:{display:false}} } }
+  });
+
+  // FY summary table
+  const tbody = document.getElementById('yoy-tbody');
+  tbody.innerHTML = [...allTots].reverse().map((d, i, arr) => {
+    const tots = d.tots;
+    const net = tots.Income - tots.Expenses - tots.Investment - tots.Savings - tots.Donation;
+    const savRate = tots.Income > 0 ? Math.round((tots.Income - tots.Expenses) / tots.Income * 100) : 0;
+    const prevTots = arr[i+1]?.tots;
+    let vsLabel = '—';
+    if (prevTots) {
+      const incDiff = tots.Income - prevTots.Income;
+      const pct = prevTots.Income > 0 ? Math.round(incDiff / prevTots.Income * 100) : 0;
+      const col = pct >= 0 ? 'var(--accent)' : 'var(--red)';
+      vsLabel = `<span style="color:${col};font-weight:600;">${pct>=0?'▲':'▼'} ${Math.abs(pct)}% income</span>`;
+    }
+    const isCur = d.fy.start === currentFY.start;
+    return `<tr style="${isCur?'background:rgba(22,163,74,0.04);font-weight:600;':''}">
+      <td>${labels[allTots.length-1-i]}${isCur?' ⭐':''}</td>
+      <td class="amt-pos">${fmt(tots.Income)}</td>
+      <td class="amt-neg">${fmt(tots.Expenses)}</td>
+      <td style="color:var(--blue);">${fmt(tots.Investment)}</td>
+      <td style="color:var(--purple);">${fmt(tots.Savings)}</td>
+      <td style="color:var(--amber);">${fmt(tots.Donation)}</td>
+      <td class="${net>=0?'amt-pos':'amt-neg'}">${fmt(net)}</td>
+      <td style="color:${savRate>=20?'var(--accent)':'var(--red)'};">${savRate}%</td>
+      <td>${vsLabel}</td>
+    </tr>`;
+  }).join('');
+
+  // Category trend chart — top 5 expense categories across FYs
+  const allExpCats = {};
+  allTots.forEach(d => {
+    let data2 = DB.transactions.filter(t => { const m=t.date.slice(0,7); return m>=d.fy.start&&m<=d.fy.end&&t.type==='Expenses'; });
+    if(scope==='me') data2=data2.filter(t=>t.userId===currentUser.id);
+    data2.forEach(t => allExpCats[t.cat]=(allExpCats[t.cat]||0)+t.amount);
+  });
+  const top5cats = Object.entries(allExpCats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([c])=>c);
+  const catColors = ['#DC2626','#EF9F27','#2563EB','#7C3AED','#16A34A'];
+  const catDatasets = top5cats.map((cat, ci) => ({
+    label: cat,
+    data: allTots.map(d => {
+      let data2 = DB.transactions.filter(t => { const m=t.date.slice(0,7); return m>=d.fy.start&&m<=d.fy.end&&t.type==='Expenses'&&t.cat===cat; });
+      if(scope==='me') data2=data2.filter(t=>t.userId===currentUser.id);
+      return data2.reduce((a,t)=>a+t.amount,0);
+    }),
+    borderColor: catColors[ci],
+    backgroundColor: catColors[ci]+'22',
+    fill: false, tension: 0.4, pointRadius: 5
+  }));
+  if(yoyCatChart) yoyCatChart.destroy();
+  if(top5cats.length) {
+    yoyCatChart = new Chart(document.getElementById('yoyCatChart'), {
+      type: 'line',
+      data: { labels, datasets: catDatasets },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ font:{size:11} } } },
+        scales:{ y:{ ticks:{ callback: v=>C()+Number(v).toLocaleString('en-IN') }, grid:{color:'rgba(0,0,0,0.05)'} }, x:{grid:{display:false}} } }
+    });
+  } else {
+    document.getElementById('yoyCatChart').parentElement.innerHTML = '<div class="empty"><div class="ei">📈</div>Add more transactions across years to see category trends</div>';
+  }
 }
 
 // Keyboard: Enter to login
