@@ -651,14 +651,17 @@ function populateCats() {
 
 function updateSub() {
   const cat = document.getElementById('t-cat').value;
-  const subs = CATS[currentType][cat] || [];
+  const subs = (CATS[currentType] && CATS[currentType][cat]) ? CATS[currentType][cat] : [];
   const sel = document.getElementById('t-sub');
+  sel.disabled = false;
   if (subs.length) {
-    sel.innerHTML = subs.map(s => `<option>${s}</option>`).join('');
-    sel.disabled = false;
+    sel.innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
+    sel.style.opacity = '1';
+    sel.style.background = 'var(--surface)';
   } else {
-    sel.innerHTML = '<option>—</option>';
-    sel.disabled = true;
+    sel.innerHTML = '<option value="">Not applicable</option>';
+    sel.style.opacity = '0.5';
+    sel.style.background = 'var(--bg)';
   }
 }
 
@@ -689,7 +692,7 @@ function saveTransaction(txnData) {
     date: document.getElementById('t-date').value || today(),
     type: currentType,
     cat: document.getElementById('t-cat').value,
-    sub: document.getElementById('t-sub').disabled ? '' : document.getElementById('t-sub').value,
+    sub: (document.getElementById('t-sub').value === 'Not applicable' || document.getElementById('t-sub').value === '') ? '' : document.getElementById('t-sub').value,
     amount: parseFloat(document.getElementById('t-amt').value) || 0,
     mode: document.getElementById('t-mode').value,
     note: document.getElementById('t-note').value,
