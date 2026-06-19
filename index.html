@@ -1169,13 +1169,21 @@ function initDefaults() {
 let fyBarChart, fyPieChart;
 
 function getFYList() {
-  // Indian FY: Apr–Mar. Generate from 2020 to next year
+  // Indian FY: Apr–Mar. Generate from 2020 to 5 years in future
   const years = [];
   const curYear = new Date().getFullYear();
   const curMonth = new Date().getMonth() + 1; // 1-based
   const currentFYStart = curMonth >= 4 ? curYear : curYear - 1;
-  for (let y = currentFYStart; y >= 2020; y--) {
-    years.push({ label: `FY ${y}-${(y+1).toString().slice(2)}`, start: `${y}-04`, end: `${y+1}-03` });
+  const fyEnd = currentFYStart + 5;   // 5 future FYs
+  const fyStart = 2020;               // history from 2020
+  for (let y = fyEnd; y >= fyStart; y--) {
+    const isCurrent = y === currentFYStart;
+    const isFuture = y > currentFYStart;
+    years.push({
+      label: `FY ${y}-${(y+1).toString().slice(2)}${isCurrent ? ' (Current)' : isFuture ? ' (Upcoming)' : ''}`,
+      start: `${y}-04`,
+      end: `${y+1}-03`
+    });
   }
   return years;
 }
@@ -1184,6 +1192,9 @@ function populateFYSelect() {
   const sel = document.getElementById('fy-select');
   const list = getFYList();
   sel.innerHTML = list.map((fy, i) => `<option value="${i}">${fy.label}</option>`).join('');
+  // Default to current FY (the one labelled "Current")
+  const currentIdx = list.findIndex(fy => fy.label.includes('Current'));
+  if (currentIdx >= 0) sel.value = currentIdx;
 }
 
 function getFYMonths(fy) {
