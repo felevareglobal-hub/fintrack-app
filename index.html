@@ -670,18 +670,28 @@ async function syncFromSupabase() {
       sbGet('fintrack_budgets')
     ]);
 
-    DB.users = users.map(u => ({
+    const remoteUsers = users.map(u => ({
       id: u.id, name: u.name, username: u.username, pin: u.pin,
       currency: u.currency, isMasterAdmin: u.is_master_admin,
       status: u.status, createdAt: u.created_at
     }));
 
-    DB.pendingUsers = pending.map(u => ({
+    // If Supabase has users, use them. If empty but local has users, push local to Supabase first
+    if (remoteUsers.length > 0) {
+      DB.users = remoteUsers;
+    } else if (DB.users.length > 0) {
+      // Push existing local users to Supabase (first time migration)
+      for (const u of DB.users) { await pushUserToSupa(u); }
+      showSyncStatus('Migrated to cloud ✓', true);
+    }
+
+    const remotePending = pending.map(u => ({
       id: u.id, name: u.name, username: u.username, pin: u.pin,
       currency: u.currency, status: u.status, createdAt: u.created_at
     }));
+    if (remotePending.length > 0) DB.pendingUsers = remotePending;
 
-    DB.transactions = txns.map(t => ({
+    const remoteTxns = txns.map(t => ({
       id: t.id, userId: t.user_id, userName: t.user_name,
       date: t.date, type: t.type, cat: t.cat, sub: t.sub,
       amount: parseFloat(t.amount)||0, mode: t.mode, note: t.note,
@@ -690,17 +700,32 @@ async function syncFromSupabase() {
       recurParent: t.recur_parent, lastRun: t.last_run
     })).sort((a,b) => b.date.localeCompare(a.date));
 
+    // Merge: combine local + remote transactions, deduplicate by id
+    if (remoteTxns.length > 0) {
+      const remoteIds = new Set(remoteTxns.map(t => t.id));
+      const localOnly = DB.transactions.filter(t => !remoteIds.has(t.id));
+      // Push local-only transactions to Supabase
+      for (const t of localOnly) { await pushTransactionToSupa(t); }
+      DB.transactions = [...remoteTxns, ...localOnly].sort((a,b) => b.date.localeCompare(a.date));
+    } else if (DB.transactions.length > 0) {
+      // Push all local transactions to Supabase (first time migration)
+      for (const t of DB.transactions) { await pushTransactionToSupa(t); }
+    }
+
     // Rebuild budgets object from rows
-    DB.budgets = {};
-    budgetRows.forEach(b => {
-      const key = 'budget_' + b.user_id + '_' + b.month;
-      if (!DB.budgets[key]) DB.budgets[key] = {};
-      DB.budgets[key][b.cat] = parseFloat(b.amount)||0;
-    });
+    if (budgetRows.length > 0) {
+      DB.budgets = {};
+      budgetRows.forEach(b => {
+        const key = 'budget_' + b.user_id + '_' + b.month;
+        if (!DB.budgets[key]) DB.budgets[key] = {};
+        DB.budgets[key][b.cat] = parseFloat(b.amount)||0;
+      });
+    }
 
     saveLocalDB();
     showSyncStatus('Synced ✓', true);
   } catch(e) {
+    console.error('Sync error:', e);
     showSyncStatus('Offline mode', false, true);
   }
 }
