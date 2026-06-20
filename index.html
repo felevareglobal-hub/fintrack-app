@@ -194,6 +194,12 @@
   .empty .ei { font-size: 36px; margin-bottom: 8px; }
 
   /* TOAST */
+  /* EDIT MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .modal-box { background:var(--surface); border-radius:var(--radius); padding:1.5rem; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .modal-box h3 { font-size:16px; font-weight:700; margin-bottom:1.25rem; color:var(--text); }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:1.25rem; border-top:1px solid var(--border); padding-top:1rem; }
+
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy); color: white; padding: 12px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500; z-index: 9999; transform: translateY(80px); opacity: 0; transition: all 0.3s; box-shadow: var(--shadow-md); }
   #toast.show { transform: translateY(0); opacity: 1; }
 
@@ -299,6 +305,7 @@
       <a class="nav-item" onclick="showPage('fy')"><span class="ni">📅</span> Financial Year</a>
       <div class="nav-section">Settings</div>
       <a class="nav-item" onclick="showPage('users')"><span class="ni">👥</span> Users <span id="pending-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:auto;"></span></a>
+      <a class="nav-item" onclick="showPage('categories')"><span class="ni">🗂</span> Categories</a>
       <a class="nav-item" onclick="showPage('export')"><span class="ni">📤</span> Export / Import</a>
     </div>
     <div class="sidebar-footer">
@@ -318,6 +325,7 @@
     <button onclick="showPage('transactions')" id="mn-transactions"><span class="ni">📋</span>Ledger</button>
     <button onclick="showPage('budget')" id="mn-budget"><span class="ni">🎯</span>Budget</button>
     <button onclick="showPage('fy')" id="mn-fy"><span class="ni">📅</span>FY</button>
+    <button onclick="showPage('categories')" id="mn-categories"><span class="ni">🗂</span>Cats</button>
     <button onclick="showPage('export')" id="mn-export"><span class="ni">📤</span>Export</button>
   </div>
 
@@ -409,14 +417,19 @@
       <div class="page-header"><h2>Transactions</h2><p id="txn-count-label">All records</p></div>
       <div class="content">
         <div class="filter-bar">
+          <select id="tf-year" onchange="renderTxns()" style="min-width:100px;"></select>
           <input type="month" id="tf-month" onchange="renderTxns()">
-          <select id="tf-type" onchange="renderTxns()">
+          <select id="tf-type" onchange="updateCatFilter(); renderTxns()">
             <option value="">All types</option>
             <option>Income</option><option>Expenses</option><option>Investment</option><option>Savings</option><option>Donation</option>
           </select>
+          <select id="tf-cat" onchange="updateSubFilter(); renderTxns()"><option value="">All categories</option></select>
+          <select id="tf-sub" onchange="renderTxns()"><option value="">All sub-cats</option></select>
           <select id="tf-user" onchange="renderTxns()"><option value="">All users</option></select>
-          <input type="text" id="tf-search" placeholder="Search..." oninput="renderTxns()" style="min-width:150px;">
+          <input type="text" id="tf-search" placeholder="Search..." oninput="renderTxns()" style="min-width:130px;">
+          <button class="btn sm" onclick="clearTxnFilters()">✕ Clear</button>
         </div>
+        <div id="txn-summary-bar" style="display:flex;gap:12px;margin-bottom:0.75rem;flex-wrap:wrap;"></div>
         <div class="card" style="padding:0;">
           <div class="tbl-wrap">
             <table>
@@ -549,6 +562,25 @@
       </div>
     </div>
 
+    <!-- CATEGORIES -->
+    <div id="page-categories" class="section">
+      <div class="page-header"><h2>Categories</h2><p>Customise categories and sub-categories for all transaction types</p></div>
+      <div class="content">
+        <div class="filter-bar">
+          <select id="cat-type-sel" onchange="renderCategories()">
+            <option value="Income">Income</option>
+            <option value="Expenses" selected>Expenses</option>
+            <option value="Investment">Investment</option>
+            <option value="Savings">Savings</option>
+            <option value="Donation">Donation</option>
+          </select>
+          <button class="btn green sm" onclick="addCategory()">+ Add category</button>
+          <button class="btn sm" onclick="resetCats()">↺ Reset to default</button>
+        </div>
+        <div id="cat-list"></div>
+      </div>
+    </div>
+
     <!-- EXPORT -->
     <div id="page-export" class="section">
       <div class="page-header"><h2>Export / Import</h2><p>Backup and restore your data</p></div>
@@ -588,11 +620,44 @@
   </main>
 </div>
 
+<!-- EDIT TRANSACTION MODAL -->
+<div id="edit-modal" class="modal-overlay" style="display:none;" onclick="closeEditModal(event)">
+  <div class="modal-box">
+    <h3>✏️ Edit Transaction</h3>
+    <div class="form-row c3">
+      <div class="fl"><label>Date</label><input type="date" id="e-date"></div>
+      <div class="fl"><label>Type</label>
+        <select id="e-type" onchange="updateEditCats()">
+          <option>Income</option><option>Expenses</option><option>Investment</option><option>Savings</option><option>Donation</option>
+        </select>
+      </div>
+      <div class="fl"><label>Amount</label><input type="number" id="e-amt" min="0" step="0.01"></div>
+    </div>
+    <div class="form-row c2">
+      <div class="fl"><label>Category</label><select id="e-cat" onchange="updateEditSub()"></select></div>
+      <div class="fl"><label>Sub-category</label><select id="e-sub"></select></div>
+    </div>
+    <div class="form-row c2">
+      <div class="fl"><label>Payment mode</label>
+        <select id="e-mode">
+          <option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Credit Card</option><option>Debit Card</option><option>Cheque</option>
+        </select>
+      </div>
+      <div class="fl"><label>Tags</label><input type="text" id="e-tags" placeholder="e.g. work, tax"></div>
+    </div>
+    <div class="fl" style="margin-bottom:0;"><label>Note</label><input type="text" id="e-note" placeholder="Optional note"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeEditModal()">Cancel</button>
+      <button class="btn green" onclick="saveEditTransaction()">✓ Save changes</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
 // ===================== DATA =====================
-const CATS = {
+const DEFAULT_CATS = {
   Income: { 'Salary':[], 'Rent':[], 'Consultancy':[], 'Coaching':[], 'Business':[], 'Others':[] },
   Expenses: {
     'Society Maintenance':[], 'Rent':[], 'Grocery':[], 'Electricity':[], 'Commuting':[],
@@ -601,8 +666,8 @@ const CATS = {
     'House Repair':['Carpentry','Plumbing','Painting','Civil'],
     'Fuel':[], 'Capital Purchase':['TV','Fridge','AC','Music System','Home Theatre','Oven','Washing Machine','Others'],
     'Loans':['Home Loan','Personal Loan','Car Loan','Credit Card Repayment'],
-    'Credit Card':['Card 1','Card 2','Card 3','Card 4','Card 5','Card 6','Card 7','Card 8','Card 9','Card 10'],
-    'Helper / Cook':['1','2','3','4'],
+    'Credit Card':['HDFC','Kotak','ICICI','Axis','SBI','AmEx','IndusInd','Yes Bank','IDFC','RBL'],
+    'Helper / Cook':['Helper 1','Helper 2','Helper 3','Helper 4'],
     'Grooming':['Clothes','Shoes','Accessories','Watches','Hair Style','Spa','Others'],
     'Furniture & Fixtures':[], 'Medicines':[], 'Medical Bills':[], 'Education':[],
     'Domestic Travel':['Train','Flight','Hotels','Food','Local Travel'],
@@ -620,6 +685,13 @@ const CATS = {
   Savings: { 'Bank 1':[], 'Bank 2':[], 'Bank 3':[], 'Bank 4':[] },
   Donation: { 'Religious':[], 'Charity':[], 'NGO':[], 'Others':[] }
 };
+let CATS = JSON.parse(JSON.stringify(DEFAULT_CATS)); // mutable copy
+function loadCats() {
+  const saved = localStorage.getItem('fintrack_cats');
+  if (saved) { try { CATS = JSON.parse(saved); } catch {} }
+}
+function saveCats() { localStorage.setItem('fintrack_cats', JSON.stringify(CATS)); }
+loadCats();
 
 const PIE_COLORS = ['#E24B4A','#EF9F27','#2563EB','#7C3AED','#16A34A','#0891B2','#D97706','#DB2777','#059669','#9333EA','#DC2626','#F59E0B'];
 const TYPE_COLORS = { Income:'#16A34A', Expenses:'#DC2626', Investment:'#2563EB', Savings:'#7C3AED', Donation:'#D97706' };
@@ -920,6 +992,7 @@ function showPage(id) {
       : 'Manage who can access this app';
     renderUsers();
   }
+  if (id === 'categories') renderCategories();
 }
 
 // ===================== CATEGORIES =====================
@@ -1006,44 +1079,83 @@ function deleteTxn(id) {
 }
 
 function renderTxns() {
+  initTxnFilters();
+  const year  = document.getElementById('tf-year').value;
   const month = document.getElementById('tf-month').value;
-  const type = document.getElementById('tf-type').value;
+  const type  = document.getElementById('tf-type').value;
+  const cat   = document.getElementById('tf-cat').value;
+  const sub   = document.getElementById('tf-sub').value;
   const userF = document.getElementById('tf-user').value;
-  const search = document.getElementById('tf-search').value.toLowerCase();
-
-  const userSel = document.getElementById('tf-user');
-  const prevU = userSel.value;
-  userSel.innerHTML = '<option value="">All users</option>' + DB.users.map(u => `<option value="${u.id}" ${u.id===prevU?'selected':''}>${u.name}</option>`).join('');
+  const search= document.getElementById('tf-search').value.toLowerCase();
 
   let data = DB.transactions;
-  if (month) data = data.filter(t => t.date.startsWith(month));
-  if (type) data = data.filter(t => t.type === type);
-  if (userF) data = data.filter(t => t.userId === userF);
+  if (year)   data = data.filter(t => t.date.startsWith(year));
+  if (month)  data = data.filter(t => t.date.startsWith(month));
+  if (type)   data = data.filter(t => t.type === type);
+  if (cat)    data = data.filter(t => t.cat === cat);
+  if (sub)    data = data.filter(t => t.sub === sub);
+  if (userF)  data = data.filter(t => t.userId === userF);
   if (search) data = data.filter(t =>
     (t.cat||'').toLowerCase().includes(search) ||
     (t.sub||'').toLowerCase().includes(search) ||
     (t.note||'').toLowerCase().includes(search) ||
-    (t.tags||'').toLowerCase().includes(search)
+    (t.tags||'').toLowerCase().includes(search) ||
+    (t.amount+'').includes(search)
   );
+
+  // Summary bar
+  const total = data.reduce((a,t) => a + (t.type==='Income'?t.amount:-t.amount), 0);
+  const totalAmt = data.reduce((a,t) => a+t.amount, 0);
+  const byType = {};
+  data.forEach(t => byType[t.type] = (byType[t.type]||0) + t.amount);
+  document.getElementById('txn-summary-bar').innerHTML = `
+    <span style="font-size:12px;color:var(--text2);">${data.length} transactions</span>
+    <span style="font-size:12px;color:var(--text2);">Total: <strong>${fmt(totalAmt)}</strong></span>
+    ${Object.entries(byType).map(([k,v])=>`<span class="badge badge-${k}" style="font-size:11px;">${k}: ${fmt(v)}</span>`).join('')}
+  `;
 
   document.getElementById('txn-count-label').textContent = data.length + ' transactions';
 
+  // Group by month if year filter or no month filter
+  const grouped = {};
+  data.forEach(t => {
+    const key = t.date.slice(0,7);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(t);
+  });
+
   const tbody = document.getElementById('txn-tbody');
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="ei">📭</div>No transactions found</div></td></tr>'; return; }
-  tbody.innerHTML = data.map(t => `
-    <tr>
-      <td style="white-space:nowrap;">${t.date}</td>
-      <td><span class="badge badge-${t.type}">${t.type}</span></td>
-      <td>${t.cat}</td>
-      <td style="color:var(--text2);">${t.sub||'—'}</td>
-      <td class="${t.type==='Income'?'amt-pos':'amt-neg'}">${fmt(t.amount)}</td>
-      <td style="color:var(--text2);">${t.mode||'—'}</td>
-      <td style="color:var(--text2);">${t.userName||'—'}</td>
-      <td style="color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.note||''}">${t.note||'—'}</td>
-      <td>${t.tags ? t.tags.split(',').map(g=>`<span style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 7px;font-size:10px;margin:1px;">${g.trim()}</span>`).join('') : ''}</td>
-      <td><button class="btn red sm" onclick="deleteTxn('${t.id}')">✕</button></td>
-    </tr>
-  `).join('');
+
+  let html = '';
+  Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).forEach(mKey => {
+    const mData = grouped[mKey];
+    const mTotal = mData.reduce((a,t)=>a+t.amount,0);
+    const [y,m] = mKey.split('-');
+    const mLabel = new Date(y,m-1).toLocaleString('default',{month:'long',year:'numeric'});
+    html += `<tr style="background:var(--bg);">
+      <td colspan="7" style="font-size:12px;font-weight:700;color:var(--text2);padding:8px 12px;">${mLabel}</td>
+      <td colspan="3" style="font-size:12px;font-weight:700;text-align:right;padding:8px 12px;color:var(--text2);">${fmt(mTotal)}</td>
+    </tr>`;
+    mData.forEach(t => {
+      html += `<tr>
+        <td style="white-space:nowrap;">${t.date}</td>
+        <td><span class="badge badge-${t.type}">${t.type}</span></td>
+        <td>${t.cat}</td>
+        <td style="color:var(--text2);">${t.sub||'—'}</td>
+        <td class="${t.type==='Income'?'amt-pos':'amt-neg'}">${fmt(t.amount)}</td>
+        <td style="color:var(--text2);">${t.mode||'—'}</td>
+        <td style="color:var(--text2);">${t.userName||'—'}</td>
+        <td style="color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.note||''}">${t.note||'—'}</td>
+        <td>${t.tags ? t.tags.split(',').map(g=>`<span style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 7px;font-size:10px;margin:1px;">${g.trim()}</span>`).join('') : ''}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn sm" onclick="openEditModal('${t.id}')" style="margin-right:4px;">✏️</button>
+          <button class="btn red sm" onclick="deleteTxn('${t.id}')">✕</button>
+        </td>
+      </tr>`;
+    });
+  });
+  tbody.innerHTML = html;
 }
 
 // ===================== RECURRING =====================
@@ -1770,6 +1882,217 @@ function renderYoY(currentFY, scope) {
   } else {
     document.getElementById('yoyCatChart').parentElement.innerHTML = '<div class="empty"><div class="ei">📈</div>Add more transactions across years to see category trends</div>';
   }
+}
+
+// ===================== EDIT TRANSACTION =====================
+let editingId = null;
+
+function openEditModal(id) {
+  const t = DB.transactions.find(t => t.id === id);
+  if (!t) return;
+  editingId = id;
+  document.getElementById('e-date').value = t.date;
+  document.getElementById('e-type').value = t.type;
+  document.getElementById('e-amt').value = t.amount;
+  document.getElementById('e-mode').value = t.mode || 'Cash';
+  document.getElementById('e-note').value = t.note || '';
+  document.getElementById('e-tags').value = t.tags || '';
+  updateEditCats(t.cat, t.sub);
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function updateEditCats(selCat, selSub) {
+  const type = document.getElementById('e-type').value;
+  const catSel = document.getElementById('e-cat');
+  catSel.innerHTML = Object.keys(CATS[type]).map(c => `<option ${c===selCat?'selected':''}>${c}</option>`).join('');
+  updateEditSub(selSub);
+}
+
+function updateEditSub(selSub) {
+  const type = document.getElementById('e-type').value;
+  const cat = document.getElementById('e-cat').value;
+  const subs = (CATS[type] && CATS[type][cat]) ? CATS[type][cat] : [];
+  const sel = document.getElementById('e-sub');
+  if (subs.length) {
+    sel.innerHTML = subs.map(s => `<option ${s===selSub?'selected':''}>${s}</option>`).join('');
+    sel.disabled = false; sel.style.opacity = '1';
+  } else {
+    sel.innerHTML = '<option value="">Not applicable</option>';
+    sel.disabled = true; sel.style.opacity = '0.5';
+  }
+}
+
+async function saveEditTransaction() {
+  const t = DB.transactions.find(t => t.id === editingId);
+  if (!t) return;
+  t.date = document.getElementById('e-date').value;
+  t.type = document.getElementById('e-type').value;
+  t.amount = parseFloat(document.getElementById('e-amt').value) || 0;
+  t.cat = document.getElementById('e-cat').value;
+  t.sub = document.getElementById('e-sub').disabled ? '' : document.getElementById('e-sub').value;
+  t.mode = document.getElementById('e-mode').value;
+  t.note = document.getElementById('e-note').value;
+  t.tags = document.getElementById('e-tags').value;
+  saveDB();
+  await pushTransactionToSupa(t);
+  closeEditModal();
+  renderTxns();
+  toast('Transaction updated ✓');
+}
+
+function closeEditModal(e) {
+  if (e && e.target !== document.getElementById('edit-modal')) return;
+  document.getElementById('edit-modal').style.display = 'none';
+  editingId = null;
+}
+
+// ===================== ENHANCED TRANSACTIONS FILTER =====================
+function initTxnFilters() {
+  // Year filter
+  const years = new Set();
+  DB.transactions.forEach(t => years.add(t.date.slice(0,4)));
+  const curYear = new Date().getFullYear().toString();
+  years.add(curYear);
+  const yrSel = document.getElementById('tf-year');
+  const prevYr = yrSel.value;
+  yrSel.innerHTML = '<option value="">All years</option>' +
+    [...years].sort((a,b)=>b-a).map(y => `<option value="${y}" ${y===prevYr?'selected':''}>${y}</option>`).join('');
+
+  // User filter
+  const userSel = document.getElementById('tf-user');
+  const prevU = userSel.value;
+  userSel.innerHTML = '<option value="">All users</option>' +
+    DB.users.map(u => `<option value="${u.id}" ${u.id===prevU?'selected':''}>${u.name}</option>`).join('');
+}
+
+function updateCatFilter() {
+  const type = document.getElementById('tf-type').value;
+  const catSel = document.getElementById('tf-cat');
+  catSel.innerHTML = '<option value="">All categories</option>';
+  if (type && CATS[type]) {
+    Object.keys(CATS[type]).forEach(c => {
+      catSel.innerHTML += `<option>${c}</option>`;
+    });
+  } else {
+    // All categories across all types
+    const allCats = new Set();
+    DB.transactions.forEach(t => allCats.add(t.cat));
+    [...allCats].sort().forEach(c => catSel.innerHTML += `<option>${c}</option>`);
+  }
+  document.getElementById('tf-sub').innerHTML = '<option value="">All sub-cats</option>';
+}
+
+function updateSubFilter() {
+  const type = document.getElementById('tf-type').value;
+  const cat = document.getElementById('tf-cat').value;
+  const subSel = document.getElementById('tf-sub');
+  subSel.innerHTML = '<option value="">All sub-cats</option>';
+  if (type && cat && CATS[type] && CATS[type][cat] && CATS[type][cat].length) {
+    CATS[type][cat].forEach(s => subSel.innerHTML += `<option>${s}</option>`);
+  } else {
+    // Get subs from actual transactions
+    const subs = new Set();
+    DB.transactions.filter(t => (!cat||t.cat===cat) && t.sub).forEach(t => subs.add(t.sub));
+    [...subs].sort().forEach(s => subSel.innerHTML += `<option>${s}</option>`);
+  }
+}
+
+function clearTxnFilters() {
+  document.getElementById('tf-year').value = '';
+  document.getElementById('tf-month').value = '';
+  document.getElementById('tf-type').value = '';
+  document.getElementById('tf-cat').value = '';
+  document.getElementById('tf-sub').value = '';
+  document.getElementById('tf-user').value = '';
+  document.getElementById('tf-search').value = '';
+  renderTxns();
+}
+
+// ===================== CATEGORIES MANAGEMENT =====================
+function renderCategories() {
+  const type = document.getElementById('cat-type-sel').value;
+  const cats = CATS[type] || {};
+  const container = document.getElementById('cat-list');
+  container.innerHTML = Object.entries(cats).map(([cat, subs]) => `
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${subs.length?'0.75rem':'0'};">
+        <span style="font-size:14px;font-weight:600;flex:1;">${cat}</span>
+        <button class="btn sm" onclick="addSubCat('${type}','${cat}')">+ Sub</button>
+        <button class="btn sm" onclick="renameCat('${type}','${cat}')">✏️ Rename</button>
+        <button class="btn red sm" onclick="deleteCat('${type}','${cat}')">✕</button>
+      </div>
+      ${subs.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${subs.map((s,i) => `
+          <span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;">
+            ${s}
+            <button onclick="renameSubCat('${type}','${cat}',${i})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);">✏️</button>
+            <button onclick="deleteSubCat('${type}','${cat}',${i})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red);">✕</button>
+          </span>`).join('')}
+      </div>` : '<span style="font-size:12px;color:var(--text3);">No sub-categories</span>'}
+    </div>`).join('');
+}
+
+function addCategory() {
+  const type = document.getElementById('cat-type-sel').value;
+  const name = prompt('Enter new category name:');
+  if (!name || !name.trim()) return;
+  if (CATS[type][name.trim()]) { toast('Category already exists.'); return; }
+  CATS[type][name.trim()] = [];
+  saveCats(); renderCategories(); populateCats();
+  toast('Category added ✓');
+}
+
+function renameCat(type, oldName) {
+  const newName = prompt('Rename category:', oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  const subs = CATS[type][oldName];
+  delete CATS[type][oldName];
+  CATS[type][newName.trim()] = subs;
+  // Update existing transactions
+  DB.transactions.forEach(t => { if (t.type===type && t.cat===oldName) t.cat = newName.trim(); });
+  saveDB(); saveCats(); renderCategories(); populateCats();
+  toast('Category renamed ✓');
+}
+
+function deleteCat(type, cat) {
+  const used = DB.transactions.filter(t => t.type===type && t.cat===cat).length;
+  if (used > 0 && !confirm(`"${cat}" is used in ${used} transaction(s). Delete anyway?`)) return;
+  delete CATS[type][cat];
+  saveCats(); renderCategories(); populateCats();
+  toast('Category deleted');
+}
+
+function addSubCat(type, cat) {
+  const name = prompt(`Add sub-category under "${cat}":`);
+  if (!name || !name.trim()) return;
+  if (!CATS[type][cat]) CATS[type][cat] = [];
+  if (CATS[type][cat].includes(name.trim())) { toast('Already exists.'); return; }
+  CATS[type][cat].push(name.trim());
+  saveCats(); renderCategories(); populateCats();
+  toast('Sub-category added ✓');
+}
+
+function renameSubCat(type, cat, idx) {
+  const oldName = CATS[type][cat][idx];
+  const newName = prompt('Rename sub-category:', oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  CATS[type][cat][idx] = newName.trim();
+  DB.transactions.forEach(t => { if (t.type===type && t.cat===cat && t.sub===oldName) t.sub = newName.trim(); });
+  saveDB(); saveCats(); renderCategories(); populateCats();
+  toast('Sub-category renamed ✓');
+}
+
+function deleteSubCat(type, cat, idx) {
+  CATS[type][cat].splice(idx, 1);
+  saveCats(); renderCategories(); populateCats();
+  toast('Sub-category deleted');
+}
+
+function resetCats() {
+  if (!confirm('Reset all categories to default? Your custom changes will be lost.')) return;
+  CATS = JSON.parse(JSON.stringify(DEFAULT_CATS));
+  saveCats(); renderCategories(); populateCats();
+  toast('Categories reset to default ✓');
 }
 
 async function manualSync() {
