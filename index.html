@@ -249,13 +249,13 @@
       <button onclick="switchAuthTab('register')">New user</button>
     </div>
     <div id="auth-login" class="auth-form active">
-      <div class="form-group"><label>Username</label><input id="l-user" type="text" placeholder="your name" autocomplete="username"></div>
+      <div class="form-group"><label>Email address</label><input id="l-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
       <div class="form-group"><label>4-digit PIN</label><input id="l-pin" type="password" maxlength="4" placeholder="••••" autocomplete="current-password" inputmode="numeric"></div>
       <button class="btn-primary" onclick="doLogin()">Sign in →</button>
     </div>
     <div id="auth-register" class="auth-form">
       <div class="form-group"><label>Full name</label><input id="r-name" type="text" placeholder="e.g. Bhavit Shah"></div>
-      <div class="form-group"><label>Username</label><input id="r-user" type="text" placeholder="e.g. bhavit"></div>
+      <div class="form-group"><label>Email address</label><input id="r-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
       <div class="form-group"><label>4-digit PIN</label><input id="r-pin" type="password" maxlength="4" placeholder="choose a PIN" inputmode="numeric"></div>
       <div class="form-group"><label>Currency</label>
         <select id="r-curr">
@@ -469,7 +469,7 @@
           <div class="card-title">Add new user</div>
           <div class="form-row c3">
             <div class="fl"><label>Full name</label><input type="text" id="nu-name" placeholder="Full name"></div>
-            <div class="fl"><label>Username</label><input type="text" id="nu-user" placeholder="username"></div>
+            <div class="fl"><label>Email address</label><input type="email" id="nu-user" placeholder="user@email.com"></div>
             <div class="fl"><label>4-digit PIN</label><input type="password" maxlength="4" id="nu-pin" placeholder="••••" inputmode="numeric"></div>
           </div>
           <button class="btn green sm" onclick="addUser()">+ Add user</button>
@@ -671,7 +671,7 @@ async function syncFromSupabase() {
     ]);
 
     const remoteUsers = users.map(u => ({
-      id: u.id, name: u.name, username: u.username, pin: u.pin,
+      id: u.id, name: u.name, email: u.username, username: u.username, pin: u.pin,
       currency: u.currency, isMasterAdmin: u.is_master_admin,
       status: u.status, createdAt: u.created_at
     }));
@@ -686,7 +686,7 @@ async function syncFromSupabase() {
     }
 
     const remotePending = pending.map(u => ({
-      id: u.id, name: u.name, username: u.username, pin: u.pin,
+      id: u.id, name: u.name, email: u.username, username: u.username, pin: u.pin,
       currency: u.currency, status: u.status, createdAt: u.created_at
     }));
     if (remotePending.length > 0) DB.pendingUsers = remotePending;
@@ -743,7 +743,7 @@ async function pushTransactionToSupa(t) {
 
 async function pushUserToSupa(u) {
   return sbUpsert('fintrack_users', {
-    id: u.id, name: u.name, username: u.username, pin: u.pin,
+    id: u.id, name: u.name, username: u.email||u.username, pin: u.pin,
     currency: u.currency, is_master_admin: u.isMasterAdmin||false,
     status: u.status||'approved', created_at: u.createdAt
   });
@@ -804,12 +804,12 @@ function renderAuthScreen() {
   if (DB.users.length) {
     ql.style.display = 'block';
     ql.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Quick access</div>' +
-      DB.users.map(u => `<span class="user-chip" onclick="quickLogin('${u.username}')">👤 ${u.name}</span>`).join('');
+      DB.users.map(u => `<span class="user-chip" onclick="quickLogin('${u.email}')">👤 ${u.name}</span>`).join('');
   }
 }
 
-function quickLogin(username) {
-  document.getElementById('l-user').value = username;
+function quickLogin(email) {
+  document.getElementById('l-email').value = email;
   document.getElementById('l-pin').focus();
   switchAuthTab('login');
 }
@@ -821,35 +821,45 @@ function switchAuthTab(tab) {
   document.getElementById('auth-err').textContent = '';
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function showAuthErr(msg, type) {
+  const el = document.getElementById('auth-err');
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? 'var(--accent)' : type === 'warn' ? 'var(--amber)' : type === 'info' ? 'var(--text3)' : 'var(--red)';
+}
+
 async function doLogin() {
-  const user = document.getElementById('l-user').value.trim().toLowerCase();
+  const email = document.getElementById('l-email').value.trim().toLowerCase();
   const pin = document.getElementById('l-pin').value.trim();
-  document.getElementById('auth-err').style.color = 'var(--text3)';
-  document.getElementById('auth-err').textContent = 'Checking...';
+  if (!email || !pin) { showAuthErr('Please enter your email and PIN.'); return; }
+  if (!isValidEmail(email)) { showAuthErr('Please enter a valid email address.'); return; }
+  showAuthErr('Signing in...', 'info');
   await syncFromSupabase();
-  // Check if pending approval
-  const pending = DB.pendingUsers.find(u => u.username.toLowerCase() === user && u.pin === pin);
-  if (pending) { document.getElementById('auth-err').style.color='var(--amber)'; document.getElementById('auth-err').textContent = '⏳ Your account is pending Master Admin approval.'; return; }
-  const found = DB.users.find(u => u.username.toLowerCase() === user && u.pin === pin);
-  if (!found) { document.getElementById('auth-err').style.color='var(--red)'; document.getElementById('auth-err').textContent = 'Invalid username or PIN.'; return; }
+  const pending = DB.pendingUsers.find(u => u.email.toLowerCase() === email && u.pin === pin);
+  if (pending) { showAuthErr('⏳ Your account is pending Master Admin approval.', 'warn'); return; }
+  const found = DB.users.find(u => u.email.toLowerCase() === email && u.pin === pin);
+  if (!found) { showAuthErr('Invalid email or PIN. Please try again.', 'err'); return; }
   document.getElementById('auth-err').textContent = '';
   loginAs(found);
 }
 
 async function doRegister() {
   const name = document.getElementById('r-name').value.trim();
-  const user = document.getElementById('r-user').value.trim().toLowerCase();
+  const email = document.getElementById('r-email').value.trim().toLowerCase();
   const pin = document.getElementById('r-pin').value.trim();
   const curr = document.getElementById('r-curr').value;
-  if (!name || !user || pin.length !== 4) { document.getElementById('auth-err').textContent = 'Please fill all fields. PIN must be 4 digits.'; return; }
-  document.getElementById('auth-err').style.color = 'var(--text3)';
-  document.getElementById('auth-err').textContent = 'Checking...';
+  if (!name || !email || pin.length !== 4) { showAuthErr('Please fill all fields. PIN must be 4 digits.'); return; }
+  if (!isValidEmail(email)) { showAuthErr('Please enter a valid email address.'); return; }
+  showAuthErr('Checking...', 'info');
   await syncFromSupabase();
-  if (DB.users.find(u => u.username.toLowerCase() === user)) { document.getElementById('auth-err').style.color='var(--red)'; document.getElementById('auth-err').textContent = 'Username already taken.'; return; }
-  if (DB.pendingUsers.find(u => u.username.toLowerCase() === user)) { document.getElementById('auth-err').style.color='var(--amber)'; document.getElementById('auth-err').textContent = 'Registration pending approval.'; return; }
+  if (DB.users.find(u => u.email.toLowerCase() === email)) { showAuthErr('This email is already registered.', 'err'); return; }
+  if (DB.pendingUsers.find(u => u.email.toLowerCase() === email)) { showAuthErr('This email is already pending approval.', 'warn'); return; }
   // First ever user = Master Admin, logged in directly
   if (DB.users.length === 0) {
-    const newUser = { id: Date.now().toString(), name, username: user, pin, currency: curr, isMasterAdmin: true, status: 'approved', createdAt: new Date().toISOString() };
+    const newUser = { id: Date.now().toString(), name, email, username: email, pin, currency: curr, isMasterAdmin: true, status: 'approved', createdAt: new Date().toISOString() };
     DB.users.push(newUser);
     saveDB();
     await pushUserToSupa(newUser);
@@ -857,14 +867,13 @@ async function doRegister() {
     return;
   }
   // All subsequent users go to pending approval
-  const pending = { id: Date.now().toString(), name, username: user, pin, currency: curr, status: 'pending', createdAt: new Date().toISOString() };
+  const pending = { id: Date.now().toString(), name, email, username: email, pin, currency: curr, status: 'pending', createdAt: new Date().toISOString() };
   DB.pendingUsers.push(pending);
   saveDB();
   await pushPendingToSupa(pending);
-  document.getElementById('auth-err').style.color = 'var(--accent)';
-  document.getElementById('auth-err').textContent = '✓ Registration submitted! Please wait for Master Admin approval.';
+  showAuthErr('✓ Registration submitted! Please wait for Master Admin approval.', 'ok');
   document.getElementById('r-name').value = '';
-  document.getElementById('r-user').value = '';
+  document.getElementById('r-email').value = '';
   document.getElementById('r-pin').value = '';
 }
 
@@ -873,7 +882,7 @@ async function loginAs(user) {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('sb-name').textContent = user.name + (user.isMasterAdmin ? ' 👑' : '');
-  document.getElementById('sb-curr').textContent = (user.isMasterAdmin ? 'Master Admin · ' : '') + user.currency;
+  document.getElementById('sb-curr').textContent = (user.isMasterAdmin ? 'Master Admin · ' : '') + (user.email||user.username);
   populateCats();
   initDefaults();
   showPage('dashboard');
@@ -1282,7 +1291,7 @@ function renderUsers() {
             <div class="user-avatar" style="background:var(--amber);">${u.name.charAt(0).toUpperCase()}</div>
             <div class="user-info">
               <div class="un">${u.name}</div>
-              <div class="ur">@${u.username} · ${u.currency} · Requested ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
+              <div class="ur">${u.email||u.username} · ${u.currency} · Requested ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
             </div>
             <button class="btn green sm" onclick="approveUser('${u.id}')">✓ Approve</button>
             <button class="btn red sm" onclick="rejectUser('${u.id}')">✕ Reject</button>
@@ -1296,7 +1305,7 @@ function renderUsers() {
       <div class="user-avatar" style="background:${u.isMasterAdmin?'var(--accent)':'var(--navy2)'};">${u.name.charAt(0).toUpperCase()}</div>
       <div class="user-info">
         <div class="un">${u.name} ${u.isMasterAdmin?'<span style="font-size:11px;background:var(--accent-light);color:var(--accent-dark);padding:2px 8px;border-radius:10px;font-weight:600;">👑 Master Admin</span>':''}</div>
-        <div class="ur">@${u.username} · ${u.currency} · Joined ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
+        <div class="ur">${u.email||u.username} · ${u.currency} · Joined ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
       </div>
       <span style="font-size:12px;color:var(--text3);">${DB.transactions.filter(t=>t.userId===u.id).length} txns</span>
       ${u.id === currentUser.id
@@ -1343,11 +1352,12 @@ async function rejectUser(id) {
 
 function addUser() {
   const name = document.getElementById('nu-name').value.trim();
-  const user = document.getElementById('nu-user').value.trim().toLowerCase();
+  const email = document.getElementById('nu-user').value.trim().toLowerCase();
   const pin = document.getElementById('nu-pin').value.trim();
-  if (!name||!user||pin.length!==4) { toast('Fill all fields. PIN = 4 digits.'); return; }
-  if (DB.users.find(u=>u.username.toLowerCase()===user)) { toast('Username taken.'); return; }
-  const nu = { id: Date.now().toString(), name, username: user, pin, currency: currentUser.currency, isMasterAdmin: false, status:'approved', createdAt: new Date().toISOString() };
+  if (!name||!email||pin.length!==4) { toast('Fill all fields. PIN = 4 digits.'); return; }
+  if (!isValidEmail(email)) { toast('Please enter a valid email address.'); return; }
+  if (DB.users.find(u=>(u.email||u.username).toLowerCase()===email)) { toast('Email already registered.'); return; }
+  const nu = { id: Date.now().toString(), name, email, username: email, pin, currency: currentUser.currency, isMasterAdmin: false, status:'approved', createdAt: new Date().toISOString() };
   DB.users.push(nu);
   saveDB();
   pushUserToSupa(nu);
@@ -1770,6 +1780,7 @@ async function manualSync() {
 
 // Keyboard: Enter to login
 document.getElementById('l-pin').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('l-email').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('l-pin').focus(); });
 document.getElementById('r-pin').addEventListener('keydown', e => { if(e.key==='Enter') doRegister(); });
 </script>
 </body>
