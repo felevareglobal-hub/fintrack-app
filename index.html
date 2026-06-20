@@ -298,10 +298,15 @@
       <a class="nav-item" onclick="showPage('budget')"><span class="ni">🎯</span> Budget</a>
       <a class="nav-item" onclick="showPage('fy')"><span class="ni">📅</span> Financial Year</a>
       <div class="nav-section">Settings</div>
-      <a class="nav-item" onclick="showPage('users')"><span class="ni">👥</span> Users</a>
+      <a class="nav-item" onclick="showPage('users')"><span class="ni">👥</span> Users <span id="pending-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:auto;"></span></a>
       <a class="nav-item" onclick="showPage('export')"><span class="ni">📤</span> Export / Import</a>
     </div>
     <div class="sidebar-footer">
+      <div style="font-size:11px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <span style="color:rgba(255,255,255,0.3);">☁</span>
+        <span id="sync-status" style="color:var(--text3);">Connecting...</span>
+        <button onclick="manualSync()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,0.3);cursor:pointer;font-size:13px;" title="Sync now">🔄</button>
+      </div>
       <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
     </div>
   </nav>
@@ -457,7 +462,7 @@
 
     <!-- USERS -->
     <div id="page-users" class="section">
-      <div class="page-header"><h2>Users</h2><p>Manage who can access this app</p></div>
+      <div class="page-header"><h2>Users</h2><p id="users-subtitle">Manage who can access this app</p></div>
       <div class="content">
         <div id="user-cards"></div>
         <div class="card" style="margin-top:1rem;">
@@ -619,24 +624,155 @@ const CATS = {
 const PIE_COLORS = ['#E24B4A','#EF9F27','#2563EB','#7C3AED','#16A34A','#0891B2','#D97706','#DB2777','#059669','#9333EA','#DC2626','#F59E0B'];
 const TYPE_COLORS = { Income:'#16A34A', Expenses:'#DC2626', Investment:'#2563EB', Savings:'#7C3AED', Donation:'#D97706' };
 
-let DB = {}; // { users:[], transactions:[], budgets:{}, supabase:{} }
+const SUPA_URL = 'https://mbmrzyhcjivrbiaayiah.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ibXJ6eWhjaml2cmJpYWF5aWFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NDc4NDIsImV4cCI6MjA5NjIyMzg0Mn0.ozK0aUNvYfogJeLVnwkgGjBxGtHI_xl2f0P22GiTgAU';
+const SUPA_HEADERS = { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY };
+
+let DB = { users:[], transactions:[], budgets:{}, pendingUsers:[] };
 let currentUser = null;
 let currentType = 'Income';
 let barChart, pieChart, lineChart;
+let isSyncing = false;
 
-function loadDB() {
+// ===================== SUPABASE API =====================
+async function sbGet(table, params) {
+  let url = SUPA_URL + '/rest/v1/' + table + '?select=*';
+  if (params) url += '&' + params;
+  const r = await fetch(url, { headers: { ...SUPA_HEADERS, 'Prefer': 'return=representation' } });
+  return r.ok ? r.json() : [];
+}
+
+async function sbUpsert(table, data) {
+  const r = await fetch(SUPA_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(Array.isArray(data) ? data : [data])
+  });
+  return r.ok;
+}
+
+async function sbDelete(table, col, val) {
+  const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?' + col + '=eq.' + encodeURIComponent(val), {
+    method: 'DELETE',
+    headers: SUPA_HEADERS
+  });
+  return r.ok;
+}
+
+// ===================== SYNC =====================
+async function syncFromSupabase() {
+  showSyncStatus('Syncing...');
+  try {
+    const [users, pending, txns, budgetRows] = await Promise.all([
+      sbGet('fintrack_users'),
+      sbGet('fintrack_pending_users'),
+      sbGet('fintrack_transactions'),
+      sbGet('fintrack_budgets')
+    ]);
+
+    DB.users = users.map(u => ({
+      id: u.id, name: u.name, username: u.username, pin: u.pin,
+      currency: u.currency, isMasterAdmin: u.is_master_admin,
+      status: u.status, createdAt: u.created_at
+    }));
+
+    DB.pendingUsers = pending.map(u => ({
+      id: u.id, name: u.name, username: u.username, pin: u.pin,
+      currency: u.currency, status: u.status, createdAt: u.created_at
+    }));
+
+    DB.transactions = txns.map(t => ({
+      id: t.id, userId: t.user_id, userName: t.user_name,
+      date: t.date, type: t.type, cat: t.cat, sub: t.sub,
+      amount: parseFloat(t.amount)||0, mode: t.mode, note: t.note,
+      tags: t.tags, recur: t.recur, recurEnd: t.recur_end,
+      isRecurring: t.is_recurring, recurId: t.recur_id,
+      recurParent: t.recur_parent, lastRun: t.last_run
+    })).sort((a,b) => b.date.localeCompare(a.date));
+
+    // Rebuild budgets object from rows
+    DB.budgets = {};
+    budgetRows.forEach(b => {
+      const key = 'budget_' + b.user_id + '_' + b.month;
+      if (!DB.budgets[key]) DB.budgets[key] = {};
+      DB.budgets[key][b.cat] = parseFloat(b.amount)||0;
+    });
+
+    saveLocalDB();
+    showSyncStatus('Synced ✓', true);
+  } catch(e) {
+    showSyncStatus('Offline mode', false, true);
+  }
+}
+
+async function pushTransactionToSupa(t) {
+  return sbUpsert('fintrack_transactions', {
+    id: t.id, user_id: t.userId, user_name: t.userName,
+    date: t.date, type: t.type, cat: t.cat, sub: t.sub,
+    amount: t.amount, mode: t.mode, note: t.note,
+    tags: t.tags, recur: t.recur, recur_end: t.recurEnd,
+    is_recurring: t.isRecurring, recur_id: t.recurId,
+    recur_parent: t.recurParent, last_run: t.lastRun
+  });
+}
+
+async function pushUserToSupa(u) {
+  return sbUpsert('fintrack_users', {
+    id: u.id, name: u.name, username: u.username, pin: u.pin,
+    currency: u.currency, is_master_admin: u.isMasterAdmin||false,
+    status: u.status||'approved', created_at: u.createdAt
+  });
+}
+
+async function pushPendingToSupa(u) {
+  return sbUpsert('fintrack_pending_users', {
+    id: u.id, name: u.name, username: u.username, pin: u.pin,
+    currency: u.currency, status: 'pending', created_at: u.createdAt
+  });
+}
+
+async function pushBudgetToSupa(userId, month, cat, amount) {
+  return sbUpsert('fintrack_budgets', {
+    id: userId + '_' + month + '_' + cat.replace(/\s/g,'_'),
+    user_id: userId, month, cat, amount
+  });
+}
+
+function showSyncStatus(msg, success, warn) {
+  let el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = success ? 'var(--accent)' : warn ? 'var(--amber)' : 'var(--text3)';
+}
+
+// ===================== LOCAL FALLBACK =====================
+function loadLocalDB() {
   const raw = localStorage.getItem('fintrack_db');
-  if (raw) { try { DB = JSON.parse(raw); } catch { DB = {}; } }
+  if (raw) { try { DB = JSON.parse(raw); } catch { DB = { users:[], transactions:[], budgets:{}, pendingUsers:[] }; } }
   if (!DB.users) DB.users = [];
   if (!DB.transactions) DB.transactions = [];
   if (!DB.budgets) DB.budgets = {};
-  if (!DB.supabase) DB.supabase = {};
+  if (!DB.pendingUsers) DB.pendingUsers = [];
 }
-function saveDB() { localStorage.setItem('fintrack_db', JSON.stringify(DB)); }
+
+function saveLocalDB() { localStorage.setItem('fintrack_db', JSON.stringify(DB)); }
+function saveDB() { saveLocalDB(); }
+function updatePendingBadge() {
+  const badge = document.getElementById('pending-badge');
+  if (!badge || !currentUser || !currentUser.isMasterAdmin) return;
+  const count = DB.pendingUsers.length;
+  badge.style.display = count > 0 ? 'inline' : 'none';
+  badge.textContent = count;
+}
 
 // ===================== AUTH =====================
-loadDB();
-renderAuthScreen();
+async function initApp() {
+  loadLocalDB();
+  renderAuthScreen();
+  await syncFromSupabase();
+  renderAuthScreen(); // refresh with synced users
+}
+initApp();
 
 function renderAuthScreen() {
   const ql = document.getElementById('user-quick');
@@ -660,37 +796,66 @@ function switchAuthTab(tab) {
   document.getElementById('auth-err').textContent = '';
 }
 
-function doLogin() {
+async function doLogin() {
   const user = document.getElementById('l-user').value.trim().toLowerCase();
   const pin = document.getElementById('l-pin').value.trim();
+  document.getElementById('auth-err').style.color = 'var(--text3)';
+  document.getElementById('auth-err').textContent = 'Checking...';
+  await syncFromSupabase();
+  // Check if pending approval
+  const pending = DB.pendingUsers.find(u => u.username.toLowerCase() === user && u.pin === pin);
+  if (pending) { document.getElementById('auth-err').style.color='var(--amber)'; document.getElementById('auth-err').textContent = '⏳ Your account is pending Master Admin approval.'; return; }
   const found = DB.users.find(u => u.username.toLowerCase() === user && u.pin === pin);
-  if (!found) { document.getElementById('auth-err').textContent = 'Invalid username or PIN.'; return; }
+  if (!found) { document.getElementById('auth-err').style.color='var(--red)'; document.getElementById('auth-err').textContent = 'Invalid username or PIN.'; return; }
+  document.getElementById('auth-err').textContent = '';
   loginAs(found);
 }
 
-function doRegister() {
+async function doRegister() {
   const name = document.getElementById('r-name').value.trim();
   const user = document.getElementById('r-user').value.trim().toLowerCase();
   const pin = document.getElementById('r-pin').value.trim();
   const curr = document.getElementById('r-curr').value;
   if (!name || !user || pin.length !== 4) { document.getElementById('auth-err').textContent = 'Please fill all fields. PIN must be 4 digits.'; return; }
-  if (DB.users.find(u => u.username.toLowerCase() === user)) { document.getElementById('auth-err').textContent = 'Username already taken.'; return; }
-  const newUser = { id: Date.now().toString(), name, username: user, pin, currency: curr, createdAt: new Date().toISOString() };
-  DB.users.push(newUser);
+  document.getElementById('auth-err').style.color = 'var(--text3)';
+  document.getElementById('auth-err').textContent = 'Checking...';
+  await syncFromSupabase();
+  if (DB.users.find(u => u.username.toLowerCase() === user)) { document.getElementById('auth-err').style.color='var(--red)'; document.getElementById('auth-err').textContent = 'Username already taken.'; return; }
+  if (DB.pendingUsers.find(u => u.username.toLowerCase() === user)) { document.getElementById('auth-err').style.color='var(--amber)'; document.getElementById('auth-err').textContent = 'Registration pending approval.'; return; }
+  // First ever user = Master Admin, logged in directly
+  if (DB.users.length === 0) {
+    const newUser = { id: Date.now().toString(), name, username: user, pin, currency: curr, isMasterAdmin: true, status: 'approved', createdAt: new Date().toISOString() };
+    DB.users.push(newUser);
+    saveDB();
+    await pushUserToSupa(newUser);
+    loginAs(newUser);
+    return;
+  }
+  // All subsequent users go to pending approval
+  const pending = { id: Date.now().toString(), name, username: user, pin, currency: curr, status: 'pending', createdAt: new Date().toISOString() };
+  DB.pendingUsers.push(pending);
   saveDB();
-  loginAs(newUser);
+  await pushPendingToSupa(pending);
+  document.getElementById('auth-err').style.color = 'var(--accent)';
+  document.getElementById('auth-err').textContent = '✓ Registration submitted! Please wait for Master Admin approval.';
+  document.getElementById('r-name').value = '';
+  document.getElementById('r-user').value = '';
+  document.getElementById('r-pin').value = '';
 }
 
-function loginAs(user) {
+async function loginAs(user) {
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  document.getElementById('sb-name').textContent = user.name;
-  document.getElementById('sb-curr').textContent = user.currency + ' · ' + user.username;
-  processRecurring();
-  showPage('dashboard');
+  document.getElementById('sb-name').textContent = user.name + (user.isMasterAdmin ? ' 👑' : '');
+  document.getElementById('sb-curr').textContent = (user.isMasterAdmin ? 'Master Admin · ' : '') + user.currency;
   populateCats();
   initDefaults();
+  showPage('dashboard');
+  await syncFromSupabase();
+  processRecurring();
+  updatePendingBadge();
+  renderDashboard();
 }
 
 function doLogout() {
@@ -714,7 +879,13 @@ function showPage(id) {
   if (id === 'recurring') renderRecurring();
   if (id === 'budget') renderBudget();
   if (id === 'fy') { populateFYSelect(); renderFY(); }
-  if (id === 'users') renderUsers();
+  if (id === 'users') {
+    const pending = DB.pendingUsers.length;
+    document.getElementById('users-subtitle').textContent = pending > 0
+      ? `⚠️ ${pending} registration(s) waiting for your approval`
+      : 'Manage who can access this app';
+    renderUsers();
+  }
 }
 
 // ===================== CATEGORIES =====================
@@ -780,6 +951,7 @@ function saveTransaction(txnData) {
   if (!t.amount || t.amount <= 0) { toast('Enter a valid amount.'); return; }
   DB.transactions.unshift(t);
   saveDB();
+  pushTransactionToSupa(t);
   if (!txnData) {
     document.getElementById('t-amt').value = '';
     document.getElementById('t-note').value = '';
@@ -794,6 +966,7 @@ function deleteTxn(id) {
   if (!confirm('Delete this transaction?')) return;
   DB.transactions = DB.transactions.filter(t => t.id !== id);
   saveDB();
+  sbDelete('fintrack_transactions', 'id', id);
   renderTxns();
   toast('Deleted');
 }
@@ -1047,7 +1220,15 @@ function setBudget(month, cat, val) {
   DB.budgets[key][cat] = parseFloat(val)||0;
 }
 
-function saveBudgets() { saveDB(); toast('Budgets saved ✓'); }
+async function saveBudgets() {
+  saveDB();
+  const month = document.getElementById('bgt-month').value || thisMonth();
+  const key = 'budget_' + currentUser.id + '_' + month;
+  const bgt = DB.budgets[key] || {};
+  const pushes = Object.entries(bgt).map(([cat, amount]) => pushBudgetToSupa(currentUser.id, month, cat, amount));
+  await Promise.all(pushes);
+  toast('Budgets saved ✓');
+}
 
 function copyLastMonthBudget() {
   const month = document.getElementById('bgt-month').value || thisMonth();
@@ -1063,20 +1244,76 @@ function copyLastMonthBudget() {
 
 // ===================== USERS =====================
 function renderUsers() {
-  document.getElementById('user-cards').innerHTML = DB.users.map(u => `
+  const isMaster = currentUser.isMasterAdmin;
+
+  // Pending approvals section (only visible to Master Admin)
+  let pendingHtml = '';
+  if (isMaster && DB.pendingUsers.length > 0) {
+    pendingHtml = `
+      <div class="card" style="border:1.5px solid #FCD34D; background:#FFFBEB; margin-bottom:1rem;">
+        <div class="card-title" style="color:var(--amber);">⏳ Pending Approvals (${DB.pendingUsers.length})</div>
+        ${DB.pendingUsers.map(u => `
+          <div class="user-card" style="border-color:#FCD34D;">
+            <div class="user-avatar" style="background:var(--amber);">${u.name.charAt(0).toUpperCase()}</div>
+            <div class="user-info">
+              <div class="un">${u.name}</div>
+              <div class="ur">@${u.username} · ${u.currency} · Requested ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
+            </div>
+            <button class="btn green sm" onclick="approveUser('${u.id}')">✓ Approve</button>
+            <button class="btn red sm" onclick="rejectUser('${u.id}')">✕ Reject</button>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // Active users
+  const usersHtml = DB.users.map(u => `
     <div class="user-card">
-      <div class="user-avatar">${u.name.charAt(0).toUpperCase()}</div>
+      <div class="user-avatar" style="background:${u.isMasterAdmin?'var(--accent)':'var(--navy2)'};">${u.name.charAt(0).toUpperCase()}</div>
       <div class="user-info">
-        <div class="un">${u.name}</div>
+        <div class="un">${u.name} ${u.isMasterAdmin?'<span style="font-size:11px;background:var(--accent-light);color:var(--accent-dark);padding:2px 8px;border-radius:10px;font-weight:600;">👑 Master Admin</span>':''}</div>
         <div class="ur">@${u.username} · ${u.currency} · Joined ${u.createdAt?u.createdAt.slice(0,10):'—'}</div>
       </div>
       <span style="font-size:12px;color:var(--text3);">${DB.transactions.filter(t=>t.userId===u.id).length} txns</span>
-      ${u.id !== currentUser.id ? `<button class="btn red sm" onclick="removeUser('${u.id}')">Remove</button>` : '<span style="font-size:11px;color:var(--accent);">You</span>'}
+      ${u.id === currentUser.id
+        ? '<span style="font-size:11px;color:var(--accent);">You</span>'
+        : isMaster
+          ? `<button class="btn red sm" onclick="removeUser('${u.id}')">Remove</button>`
+          : ''}
     </div>
   `).join('');
 
+  document.getElementById('user-cards').innerHTML = pendingHtml + usersHtml;
+
+  // Hide "Add user" card from non-master admins
+  const addCard = document.querySelector('#page-users .card:last-child');
+  if (addCard) addCard.style.display = isMaster ? 'block' : 'none';
+
   const eu = document.getElementById('exp-user');
   eu.innerHTML = '<option value="">All users</option>' + DB.users.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+}
+
+async function approveUser(id) {
+  const idx = DB.pendingUsers.findIndex(u => u.id === id);
+  if (idx === -1) return;
+  const user = { ...DB.pendingUsers[idx], status: 'approved' };
+  DB.users.push(user);
+  DB.pendingUsers.splice(idx, 1);
+  saveDB();
+  await pushUserToSupa(user);
+  await sbDelete('fintrack_pending_users', 'id', id);
+  renderUsers(); updatePendingBadge();
+  toast('✓ ' + user.name + ' approved!');
+}
+
+async function rejectUser(id) {
+  const u = DB.pendingUsers.find(u => u.id === id);
+  if (!u) return;
+  if (!confirm('Reject ' + u.name + '? This will delete their registration.')) return;
+  DB.pendingUsers = DB.pendingUsers.filter(u => u.id !== id);
+  saveDB();
+  await sbDelete('fintrack_pending_users', 'id', id);
+  renderUsers(); updatePendingBadge();
+  toast('Registration rejected.');
 }
 
 function addUser() {
@@ -1085,17 +1322,23 @@ function addUser() {
   const pin = document.getElementById('nu-pin').value.trim();
   if (!name||!user||pin.length!==4) { toast('Fill all fields. PIN = 4 digits.'); return; }
   if (DB.users.find(u=>u.username.toLowerCase()===user)) { toast('Username taken.'); return; }
-  DB.users.push({ id: Date.now().toString(), name, username: user, pin, currency: currentUser.currency, createdAt: new Date().toISOString() });
-  saveDB(); renderUsers();
+  const nu = { id: Date.now().toString(), name, username: user, pin, currency: currentUser.currency, isMasterAdmin: false, status:'approved', createdAt: new Date().toISOString() };
+  DB.users.push(nu);
+  saveDB();
+  pushUserToSupa(nu);
+  renderUsers();
   document.getElementById('nu-name').value=''; document.getElementById('nu-user').value=''; document.getElementById('nu-pin').value='';
   toast('User added ✓');
 }
 
-function removeUser(id) {
+async function removeUser(id) {
   if (!confirm('Remove this user and all their transactions?')) return;
   DB.users = DB.users.filter(u=>u.id!==id);
   DB.transactions = DB.transactions.filter(t=>t.userId!==id);
-  saveDB(); renderUsers(); toast('User removed');
+  saveDB();
+  await sbDelete('fintrack_users', 'id', id);
+  await sbDelete('fintrack_transactions', 'user_id', id);
+  renderUsers(); toast('User removed');
 }
 
 // ===================== EXPORT / IMPORT =====================
@@ -1492,6 +1735,12 @@ function renderYoY(currentFY, scope) {
   } else {
     document.getElementById('yoyCatChart').parentElement.innerHTML = '<div class="empty"><div class="ei">📈</div>Add more transactions across years to see category trends</div>';
   }
+}
+
+async function manualSync() {
+  await syncFromSupabase();
+  renderDashboard();
+  toast('Synced with cloud ✓');
 }
 
 // Keyboard: Enter to login
