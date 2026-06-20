@@ -10,8 +10,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FinTrack — Personal Finance Manager</title>
+<meta name="description" content="FinTrack — Personal Finance Manager by Felevare Global Ventures LLP">
+<meta name="theme-color" content="#0F1724">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FinTrack">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230F1724'/><text y='.9em' font-size='80' x='10'>💰</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
   :root {
     --navy: #0F1724;
@@ -41,6 +51,29 @@
     --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
     --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
   }
+  [data-theme="dark"] {
+    --navy: #0A0F1A;
+    --navy2: #111827;
+    --navy3: #1F2937;
+    --bg: #111827;
+    --surface: #1F2937;
+    --border: #374151;
+    --border2: #4B5563;
+    --text: #F9FAFB;
+    --text2: #9CA3AF;
+    --text3: #6B7280;
+    --accent-light: #14532D;
+    --red-light: #450A0A;
+    --blue-light: #1E3A5F;
+    --amber-light: #451A03;
+    --purple-light: #2E1065;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.5);
+  }
+  [data-theme="dark"] .auth-box { background: #1F2937; }
+  [data-theme="dark"] .auth-tabs button.active { background: #374151; }
+  [data-theme="dark"] tr:hover td { background: #374151; }
+  [data-theme="dark"] .metric { background: #1F2937; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
 
@@ -314,6 +347,13 @@
         <span id="sync-status" style="color:var(--text3);">Connecting...</span>
         <button onclick="manualSync()" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,0.3);cursor:pointer;font-size:13px;" title="Sync now">🔄</button>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:12px;color:rgba(255,255,255,0.4);">🌙 Dark mode</span>
+        <label class="switch" style="margin-left:auto;">
+          <input type="checkbox" id="dark-toggle" onchange="toggleDark(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
       <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
     </div>
   </nav>
@@ -562,6 +602,64 @@
       </div>
     </div>
 
+    <!-- BANK BALANCES -->
+    <div id="page-banks" class="section">
+      <div class="page-header"><h2>Bank Balances</h2><p>Track your bank account balances manually</p></div>
+      <div class="content">
+        <div class="metrics" id="bank-metrics"></div>
+        <div class="card">
+          <div class="card-title">Your bank accounts</div>
+          <div id="bank-list"></div>
+          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+            <div class="card-title">Add / update bank</div>
+            <div class="form-row c4">
+              <div class="fl"><label>Bank name</label><input type="text" id="b-name" placeholder="e.g. HDFC Bank"></div>
+              <div class="fl"><label>Account type</label>
+                <select id="b-type">
+                  <option>Savings</option><option>Current</option><option>Salary</option><option>NRI</option><option>Fixed Deposit</option>
+                </select>
+              </div>
+              <div class="fl"><label>Balance (₹)</label><input type="number" id="b-bal" placeholder="0" min="0"></div>
+              <div class="fl"><label>As on date</label><input type="date" id="b-date"></div>
+            </div>
+            <button class="btn green sm" onclick="addBank()">+ Add bank account</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Balance history</div>
+          <div class="chart-box" style="height:200px;"><canvas id="bankChart" role="img" aria-label="Bank balance chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREDIT CARD REMINDERS -->
+    <div id="page-cards" class="section">
+      <div class="page-header"><h2>Credit Card Reminders</h2><p>Track due dates and outstanding amounts</p></div>
+      <div class="content">
+        <div class="metrics" id="card-metrics"></div>
+        <div id="card-due-alert" style="margin-bottom:1rem;"></div>
+        <div class="card">
+          <div class="card-title">Your credit cards</div>
+          <div id="card-list"></div>
+          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+            <div class="card-title">Add / update card</div>
+            <div class="form-row c4">
+              <div class="fl"><label>Card name</label><input type="text" id="cc-name" placeholder="e.g. HDFC Regalia"></div>
+              <div class="fl"><label>Bank</label><input type="text" id="cc-bank" placeholder="e.g. HDFC"></div>
+              <div class="fl"><label>Outstanding (₹)</label><input type="number" id="cc-due" placeholder="0" min="0"></div>
+              <div class="fl"><label>Due date</label><input type="date" id="cc-date"></div>
+            </div>
+            <div class="form-row c3">
+              <div class="fl"><label>Credit limit (₹)</label><input type="number" id="cc-limit" placeholder="0" min="0"></div>
+              <div class="fl"><label>Statement date</label><input type="number" id="cc-stmt" placeholder="e.g. 15" min="1" max="31"></div>
+              <div class="fl"><label>Min. payment (₹)</label><input type="number" id="cc-min" placeholder="0" min="0"></div>
+            </div>
+            <button class="btn green sm" onclick="addCard()">+ Add credit card</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- CATEGORIES -->
     <div id="page-categories" class="section">
       <div class="page-header"><h2>Categories</h2><p>Customise categories and sub-categories for all transaction types</p></div>
@@ -598,6 +696,7 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn green" onclick="exportExcel()">📊 Export Excel</button>
               <button class="btn blue" onclick="exportCSV()">📄 Export CSV</button>
+              <button class="btn" onclick="exportPDF()">📋 Export PDF</button>
               <button class="btn" onclick="exportJSON()">💾 Export JSON</button>
             </div>
           </div>
@@ -606,6 +705,12 @@
             <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Restore from a previously exported JSON backup. Duplicate entries are skipped.</p>
             <div class="fl" style="margin-bottom:1rem;"><label>JSON file</label><input type="file" id="imp-file" accept=".json" onchange="importJSON(this)"></div>
             <p style="font-size:12px;color:var(--text3);">Supabase sync: add your project URL and anon key below to enable cross-device sync.</p>
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+              <div class="card-title">📱 Install as App</div>
+              <p style="font-size:13px;color:var(--text2);margin-bottom:0.75rem;">Install FinTrack on your phone's home screen for quick access.</p>
+              <button id="pwa-install-btn" class="btn green" onclick="installPWA()" style="display:none;">📱 Install FinTrack App</button>
+              <p style="font-size:12px;color:var(--text3);margin-top:0.5rem;">On iPhone: tap Share → Add to Home Screen. On Android: tap the install button above or browser menu → Add to Home Screen.</p>
+            </div>
             <div class="form-row c2" style="margin-top:0.75rem;">
               <div class="fl"><label>Supabase URL</label><input type="text" id="sb-url" placeholder="https://xxx.supabase.co"></div>
               <div class="fl"><label>Anon key</label><input type="text" id="sb-key" placeholder="eyJ..."></div>
@@ -943,6 +1048,7 @@ async function doRegister() {
   DB.pendingUsers.push(pending);
   saveDB();
   await pushPendingToSupa(pending);
+  sendApprovalEmail(pending);
   showAuthErr('✓ Registration submitted! Please wait for Master Admin approval.', 'ok');
   document.getElementById('r-name').value = '';
   document.getElementById('r-email').value = '';
@@ -957,6 +1063,8 @@ async function loginAs(user) {
   document.getElementById('sb-curr').textContent = (user.isMasterAdmin ? 'Master Admin · ' : '') + (user.email||user.username);
   populateCats();
   initDefaults();
+  initTheme();
+  initEmailJS();
   showPage('dashboard');
   await syncFromSupabase();
   processRecurring();
@@ -993,6 +1101,8 @@ function showPage(id) {
     renderUsers();
   }
   if (id === 'categories') renderCategories();
+  if (id === 'banks') { document.getElementById('b-date').value = today(); renderBanks(); }
+  if (id === 'cards') { document.getElementById('cc-date').value = today(); renderCards(); }
 }
 
 // ===================== CATEGORIES =====================
@@ -2099,6 +2209,295 @@ async function manualSync() {
   await syncFromSupabase();
   renderDashboard();
   toast('Synced with cloud ✓');
+}
+
+// ===================== DARK MODE =====================
+function toggleDark(on) {
+  document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+  localStorage.setItem('fintrack_theme', on ? 'dark' : 'light');
+}
+function initTheme() {
+  const saved = localStorage.getItem('fintrack_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  const tog = document.getElementById('dark-toggle');
+  if (tog) tog.checked = saved === 'dark';
+}
+initTheme();
+
+// ===================== PWA SERVICE WORKER =====================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    const swCode = `
+const CACHE='fintrack-v1';
+const ASSETS=['./', './index.html'];
+self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))));
+self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./index.html')))));
+    `;
+    const blob = new Blob([swCode], {type:'application/javascript'});
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(() => {});
+  });
+}
+
+// PWA install prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'inline-flex';
+});
+function installPWA() {
+  if (!deferredPrompt) { toast('Already installed or use browser menu to install!'); return; }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+}
+
+// ===================== BANK BALANCE TRACKER =====================
+let bankChart2;
+function getBanks() { return JSON.parse(localStorage.getItem('fintrack_banks') || '[]'); }
+function saveBanks(banks) { localStorage.setItem('fintrack_banks', JSON.stringify(banks)); }
+
+function addBank() {
+  const name = document.getElementById('b-name').value.trim();
+  const type = document.getElementById('b-type').value;
+  const bal  = parseFloat(document.getElementById('b-bal').value) || 0;
+  const date = document.getElementById('b-date').value || today();
+  if (!name) { toast('Enter bank name.'); return; }
+  const banks = getBanks();
+  const existing = banks.findIndex(b => b.name.toLowerCase() === name.toLowerCase());
+  const entry = { id: existing >= 0 ? banks[existing].id : Date.now().toString(), name, type, balance: bal, date, history: [] };
+  if (existing >= 0) {
+    entry.history = [...(banks[existing].history || []), { balance: banks[existing].balance, date: banks[existing].date }];
+    banks[existing] = entry;
+  } else {
+    banks.push(entry);
+  }
+  saveBanks(banks);
+  document.getElementById('b-name').value = '';
+  document.getElementById('b-bal').value = '';
+  renderBanks();
+  toast('Bank account saved ✓');
+}
+
+function deleteBank(id) {
+  if (!confirm('Remove this bank account?')) return;
+  saveBanks(getBanks().filter(b => b.id !== id));
+  renderBanks();
+  toast('Removed');
+}
+
+function renderBanks() {
+  const banks = getBanks();
+  const total = banks.reduce((a, b) => a + b.balance, 0);
+  document.getElementById('bank-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">Total balance</div><div class="m-value m-income">${fmt(total)}</div></div>
+    <div class="metric"><div class="m-label">Accounts</div><div class="m-value" style="color:var(--blue);">${banks.length}</div></div>
+  `;
+  document.getElementById('bank-list').innerHTML = banks.length ? banks.map(b => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+      <div style="width:40px;height:40px;background:var(--blue-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🏦</div>
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:14px;">${b.name}</div>
+        <div style="font-size:12px;color:var(--text2);">${b.type} · Updated ${b.date}</div>
+      </div>
+      <div style="font-size:18px;font-weight:700;color:var(--accent);">${fmt(b.balance)}</div>
+      <button class="btn red sm" onclick="deleteBank('${b.id}')">✕</button>
+    </div>`).join('') : '<div class="empty"><div class="ei">🏦</div>No bank accounts added yet</div>';
+
+  // Bank balance chart
+  if (bankChart2) bankChart2.destroy();
+  if (banks.length) {
+    bankChart2 = new Chart(document.getElementById('bankChart'), {
+      type: 'bar',
+      data: {
+        labels: banks.map(b => b.name),
+        datasets: [{ data: banks.map(b => b.balance), backgroundColor: '#2563EB', borderRadius: 6 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => fmt(v) } } } }
+    });
+  }
+}
+
+// ===================== CREDIT CARD REMINDERS =====================
+function getCards() { return JSON.parse(localStorage.getItem('fintrack_cards') || '[]'); }
+function saveCards(cards) { localStorage.setItem('fintrack_cards', JSON.stringify(cards)); }
+
+function addCard() {
+  const name  = document.getElementById('cc-name').value.trim();
+  const bank  = document.getElementById('cc-bank').value.trim();
+  const due   = parseFloat(document.getElementById('cc-due').value) || 0;
+  const date  = document.getElementById('cc-date').value;
+  const limit = parseFloat(document.getElementById('cc-limit').value) || 0;
+  const stmt  = document.getElementById('cc-stmt').value;
+  const min   = parseFloat(document.getElementById('cc-min').value) || 0;
+  if (!name || !date) { toast('Enter card name and due date.'); return; }
+  const cards = getCards();
+  const existing = cards.findIndex(c => c.name.toLowerCase() === name.toLowerCase());
+  const entry = { id: existing >= 0 ? cards[existing].id : Date.now().toString(), name, bank, outstanding: due, dueDate: date, limit, stmtDate: stmt, minPayment: min };
+  if (existing >= 0) cards[existing] = entry; else cards.push(entry);
+  saveCards(cards);
+  document.getElementById('cc-name').value = '';
+  document.getElementById('cc-due').value = '';
+  document.getElementById('cc-limit').value = '';
+  document.getElementById('cc-min').value = '';
+  renderCards();
+  toast('Card saved ✓');
+}
+
+function deleteCard(id) {
+  if (!confirm('Remove this card?')) return;
+  saveCards(getCards().filter(c => c.id !== id));
+  renderCards();
+}
+
+function renderCards() {
+  const cards = getCards();
+  const today_str = today();
+  const totalDue = cards.reduce((a, c) => a + c.outstanding, 0);
+  const overdue  = cards.filter(c => c.dueDate < today_str);
+  const dueSoon  = cards.filter(c => c.dueDate >= today_str && daysDiff(today_str, c.dueDate) <= 5);
+
+  document.getElementById('card-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">Total outstanding</div><div class="m-value m-expense">${fmt(totalDue)}</div></div>
+    <div class="metric"><div class="m-label">Cards</div><div class="m-value" style="color:var(--blue);">${cards.length}</div></div>
+    <div class="metric"><div class="m-label">Overdue</div><div class="m-value ${overdue.length?'m-expense':'m-income'}">${overdue.length}</div></div>
+    <div class="metric"><div class="m-label">Due in 5 days</div><div class="m-value ${dueSoon.length?'m-expense':'m-income'}">${dueSoon.length}</div></div>
+  `;
+
+  // Alerts
+  let alerts = '';
+  overdue.forEach(c => alerts += `<div style="background:var(--red-light);color:var(--red);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">⚠️ ${c.name} — Payment OVERDUE since ${c.dueDate}! Outstanding: ${fmt(c.outstanding)}</div>`);
+  dueSoon.forEach(c => alerts += `<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${c.name} — Due in ${daysDiff(today_str, c.dueDate)} days (${c.dueDate}). Pay: ${fmt(c.outstanding)}</div>`);
+  document.getElementById('card-due-alert').innerHTML = alerts;
+
+  document.getElementById('card-list').innerHTML = cards.length ? cards.map(c => {
+    const days = daysDiff(today_str, c.dueDate);
+    const isOverdue = c.dueDate < today_str;
+    const utilization = c.limit > 0 ? Math.round(c.outstanding / c.limit * 100) : 0;
+    const barCol = utilization > 80 ? 'var(--red)' : utilization > 50 ? 'var(--amber)' : 'var(--accent)';
+    return `<div style="padding:14px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div style="font-size:24px;">💳</div>
+        <div style="flex:1;">
+          <div style="font-weight:600;">${c.name} ${c.bank?'('+c.bank+')':''}</div>
+          <div style="font-size:12px;color:${isOverdue?'var(--red)':'var(--text2)'};">
+            ${isOverdue ? '⚠️ OVERDUE since' : '📅 Due on'} ${c.dueDate}
+            ${!isOverdue ? `· ${days} day${days!==1?'s':''} left` : ''}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:16px;font-weight:700;color:var(--red);">${fmt(c.outstanding)}</div>
+          ${c.minPayment ? `<div style="font-size:11px;color:var(--text3);">Min: ${fmt(c.minPayment)}</div>` : ''}
+        </div>
+        <button class="btn red sm" onclick="deleteCard('${c.id}')">✕</button>
+      </div>
+      ${c.limit ? `<div style="display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${utilization}%;background:${barCol};border-radius:3px;"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text3);">${utilization}% of ${fmt(c.limit)}</span>
+      </div>` : ''}
+    </div>`;
+  }).join('') : '<div class="empty"><div class="ei">💳</div>No credit cards added yet</div>';
+}
+
+function daysDiff(from, to) {
+  return Math.round((new Date(to) - new Date(from)) / 86400000);
+}
+
+// ===================== PDF EXPORT =====================
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const data = getExportData();
+  const from = document.getElementById('exp-from').value;
+  const to   = document.getElementById('exp-to').value;
+
+  // Header
+  doc.setFillColor(15, 23, 36);
+  doc.rect(0, 0, 297, 20, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+  doc.text('FinTrack — Financial Report', 14, 13);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text(`Period: ${from||'All'} to ${to||'All'} · Generated: ${today()}`, 180, 13);
+
+  // Summary box
+  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0 };
+  data.forEach(t => tots[t.type] = (tots[t.type]||0) + t.amount);
+  const net = tots.Income - tots.Expenses - tots.Investment - tots.Savings - tots.Donation;
+  doc.setTextColor(0,0,0);
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+  doc.text('Summary', 14, 30);
+  const sumData = [
+    ['Income', fmt(tots.Income)], ['Expenses', fmt(tots.Expenses)],
+    ['Investment', fmt(tots.Investment)], ['Savings', fmt(tots.Savings)],
+    ['Donation', fmt(tots.Donation)], ['Net Balance', fmt(net)]
+  ];
+  doc.autoTable({ startY: 33, head: [['Type','Amount']], body: sumData, margin:{left:14}, tableWidth:70,
+    headStyles:{fillColor:[22,163,74]}, styles:{fontSize:9}, columnStyles:{1:{halign:'right'}} });
+
+  // Transactions table
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+  doc.text('Transactions', 14, doc.lastAutoTable.finalY + 10);
+  const rows = data.map(t => [t.date, t.type, t.cat, t.sub||'—', fmt(t.amount), t.mode||'—', t.userName||'—', t.note||'—']);
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 13,
+    head: [['Date','Type','Category','Sub-category','Amount','Mode','User','Note']],
+    body: rows, margin:{left:14},
+    headStyles:{fillColor:[15,23,36]},
+    styles:{fontSize:8, cellPadding:2},
+    columnStyles:{4:{halign:'right'}},
+    alternateRowStyles:{fillColor:[248,250,252]}
+  });
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i=1; i<=pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text('© 2026 Felevare Global Ventures LLP. All rights reserved.', 14, 205);
+    doc.text(`Page ${i} of ${pageCount}`, 270, 205);
+  }
+
+  doc.save(`FinTrack_Report_${today()}.pdf`);
+  toast('PDF exported ✓');
+}
+
+// ===================== EMAIL NOTIFICATIONS (EmailJS) =====================
+const EMAILJS_CONFIG = {
+  serviceId: 'service_k8ufznm',
+  templateId: 'template_d2or2wc',
+  publicKey: 'iafzsEU7xDhh3d3oi',
+  masterEmail: 'felevareglobal@gmail.com'
+};
+
+function initEmailJS() {
+  if (window.emailjs && EMAILJS_CONFIG.publicKey !== 'YOUR_PUBLIC_KEY') {
+    emailjs.init(EMAILJS_CONFIG.publicKey);
+  }
+}
+
+async function sendApprovalEmail(pendingUser) {
+  if (!window.emailjs || EMAILJS_CONFIG.publicKey === 'YOUR_PUBLIC_KEY') return;
+  try {
+    await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, {
+      to_email: EMAILJS_CONFIG.masterEmail,
+      from_name: pendingUser.name,
+      from_email: pendingUser.email,
+      message: `New user registration on FinTrack:
+
+Name: ${pendingUser.name}
+Email: ${pendingUser.email}
+Requested: ${pendingUser.createdAt}
+
+Please log in to approve or reject this request.`
+    });
+    console.log('Approval email sent');
+  } catch(e) { console.log('Email not configured:', e); }
 }
 
 // Keyboard: Enter to login
