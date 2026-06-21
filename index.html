@@ -717,8 +717,34 @@
             <select id="bl-bank" onchange="renderBankLedger()" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
             <input type="month" id="bl-month" onchange="renderBankLedger()" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;">
             <button class="btn sm green" onclick="addBankEntry()">+ Add entry</button>
+            <button class="btn sm" style="background:var(--purple-light);color:var(--purple);border-color:var(--purple);" onclick="openTransferForm()">⇄ Transfer</button>
             <button class="btn sm blue" onclick="exportBankStatement()">📊 Export</button>
           </div>
+
+          <!-- INTERNAL TRANSFER FORM -->
+          <div id="bank-transfer-form" style="display:none;background:#EDE9FE;border:1.5px solid #C4B5FD;border-radius:var(--radius-sm);padding:14px;margin-bottom:1rem;">
+            <div style="font-size:13px;font-weight:700;color:var(--purple);margin-bottom:10px;">⇄ Internal Transfer between bank accounts</div>
+            <div class="form-row c4">
+              <div class="fl"><label>Date</label><input type="date" id="bt-date"></div>
+              <div class="fl"><label>From bank</label><select id="bt-from"></select></div>
+              <div class="fl"><label>To bank</label><select id="bt-to"></select></div>
+              <div class="fl"><label>Amount (₹)</label><input type="number" id="bt-amt" placeholder="0" min="0"></div>
+            </div>
+            <div class="form-row c2">
+              <div class="fl"><label>Mode</label>
+                <select id="bt-mode">
+                  <option>NEFT</option><option>RTGS</option><option>IMPS</option><option>UPI</option><option>Cheque</option><option>Cash</option>
+                </select>
+              </div>
+              <div class="fl"><label>Reference / UTR</label><input type="text" id="bt-ref" placeholder="Transaction reference"></div>
+            </div>
+            <div class="fl" style="margin-bottom:10px;"><label>Description</label><input type="text" id="bt-desc" placeholder="e.g. Fund transfer to savings account"></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn sm" style="background:var(--purple);color:white;border-color:var(--purple);" onclick="saveTransfer()">✓ Save transfer</button>
+              <button class="btn sm" onclick="document.getElementById('bank-transfer-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+
           <!-- ADD ENTRY FORM -->
           <div id="bank-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
             <div class="form-row c4">
@@ -2810,8 +2836,81 @@ function getBankBalance(bankId) {
 }
 
 function addBankEntry() {
+  document.getElementById('bank-transfer-form').style.display = 'none';
   document.getElementById('bank-entry-form').style.display = 'block';
   document.getElementById('be-date').value = today();
+}
+
+function openTransferForm() {
+  document.getElementById('bank-entry-form').style.display = 'none';
+  const form = document.getElementById('bank-transfer-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('bt-date').value = today();
+  // Populate bank dropdowns
+  const banks = getBanks();
+  const opts = banks.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('bt-from').innerHTML = opts;
+  document.getElementById('bt-to').innerHTML = opts;
+  // Auto-select different bank for "to"
+  if (banks.length >= 2) document.getElementById('bt-to').selectedIndex = 1;
+}
+
+function saveTransfer() {
+  const fromId = document.getElementById('bt-from').value;
+  const toId   = document.getElementById('bt-to').value;
+  const date   = document.getElementById('bt-date').value || today();
+  const amt    = parseFloat(document.getElementById('bt-amt').value) || 0;
+  const mode   = document.getElementById('bt-mode').value;
+  const ref    = document.getElementById('bt-ref').value.trim();
+  const desc   = document.getElementById('bt-desc').value.trim();
+
+  if (!amt || amt <= 0) { toast('Enter a valid transfer amount.'); return; }
+  if (fromId === toId) { toast('From and To bank cannot be the same.'); return; }
+
+  const banks = getBanks();
+  const fromBank = banks.find(b => b.id === fromId);
+  const toBank   = banks.find(b => b.id === toId);
+  if (!fromBank || !toBank) { toast('Invalid bank selection.'); return; }
+
+  // Check sufficient balance
+  const fromBal = getBankBalance(fromId);
+  if (fromBal < amt) {
+    if (!confirm(`⚠️ ${fromBank.name} has only ${fmt(fromBal)} available. Proceed anyway?`)) return;
+  }
+
+  const transferId = 'TRF_' + Date.now().toString();
+  const entries = getBankEntries();
+
+  // Debit from source bank
+  entries.push({
+    id: transferId + '_DR',
+    bankId: fromId,
+    date, type: 'Debit', amount: amt,
+    mode,
+    desc: (desc || 'Transfer to ' + toBank.name),
+    ref: ref || transferId,
+    transferId, isTransfer: true, transferTo: toId
+  });
+
+  // Credit to destination bank
+  entries.push({
+    id: transferId + '_CR',
+    bankId: toId,
+    date, type: 'Credit', amount: amt,
+    mode,
+    desc: (desc || 'Transfer from ' + fromBank.name),
+    ref: ref || transferId,
+    transferId, isTransfer: true, transferFrom: fromId
+  });
+
+  saveBankEntries(entries);
+  document.getElementById('bank-transfer-form').style.display = 'none';
+  document.getElementById('bt-amt').value = '';
+  document.getElementById('bt-ref').value = '';
+  document.getElementById('bt-desc').value = '';
+  renderBanks();
+  renderBankLedger();
+  toast(`✓ ${fmt(amt)} transferred from ${fromBank.name} to ${toBank.name}`);
 }
 
 function saveBankEntry() {
@@ -2835,10 +2934,20 @@ function saveBankEntry() {
 }
 
 function deleteBankEntry(id) {
-  if (!confirm('Delete this entry?')) return;
-  saveBankEntries(getBankEntries().filter(e => e.id !== id));
+  const entries = getBankEntries();
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+  if (entry.isTransfer) {
+    if (!confirm('This is a transfer entry. Deleting will remove BOTH sides (debit + credit). Continue?')) return;
+    // Delete both sides of the transfer
+    saveBankEntries(entries.filter(e => e.transferId !== entry.transferId));
+    toast('Transfer deleted from both accounts');
+  } else {
+    if (!confirm('Delete this entry?')) return;
+    saveBankEntries(entries.filter(e => e.id !== id));
+    toast('Entry deleted');
+  }
   renderBankLedger(); renderBanks();
-  toast('Entry deleted');
 }
 
 function renderBankLedger() {
@@ -2869,17 +2978,29 @@ function renderBankLedger() {
   if (!entries.length) {
     tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">📒</div>No entries for this period</div></td></tr>';
   } else {
-    tbody.innerHTML = entries.map(e => `
-      <tr>
-        <td style="white-space:nowrap;">${e.date}</td>
-        <td>${e.desc||e.mode}</td>
-        <td style="color:var(--text2);">${e.mode}</td>
-        <td style="color:var(--text3);font-size:12px;">${e.ref||'—'}</td>
-        <td class="amt-pos">${e.type==='Credit'?fmt(e.amount):'—'}</td>
-        <td class="amt-neg">${e.type==='Debit'?fmt(e.amount):'—'}</td>
-        <td style="font-weight:600;">${fmt(balMap[e.id]||0)}</td>
-        <td><button class="btn red sm" onclick="deleteBankEntry('${e.id}')">✕</button></td>
-      </tr>`).join('') +
+    tbody.innerHTML = entries.map(e => {
+    const banks = getBanks();
+    let transferLabel = '';
+    if (e.isTransfer) {
+      if (e.transferTo) {
+        const tb = banks.find(b=>b.id===e.transferTo);
+        transferLabel = `<span style="font-size:10px;background:var(--purple-light);color:var(--purple);padding:1px 6px;border-radius:10px;margin-left:4px;">⇄ To: ${tb?tb.name:'?'}</span>`;
+      } else if (e.transferFrom) {
+        const fb = banks.find(b=>b.id===e.transferFrom);
+        transferLabel = `<span style="font-size:10px;background:var(--purple-light);color:var(--purple);padding:1px 6px;border-radius:10px;margin-left:4px;">⇄ From: ${fb?fb.name:'?'}</span>`;
+      }
+    }
+    return `<tr>
+      <td style="white-space:nowrap;">${e.date}</td>
+      <td>${e.desc||e.mode}${transferLabel}</td>
+      <td style="color:var(--text2);">${e.mode}</td>
+      <td style="color:var(--text3);font-size:12px;">${e.ref||'—'}</td>
+      <td class="amt-pos">${e.type==='Credit'?fmt(e.amount):'—'}</td>
+      <td class="amt-neg">${e.type==='Debit'?fmt(e.amount):'—'}</td>
+      <td style="font-weight:600;">${fmt(balMap[e.id]||0)}</td>
+      <td><button class="btn red sm" onclick="deleteBankEntry('${e.id}')" ${e.isTransfer?'title="Deletes both sides of transfer"':''}>${e.isTransfer?'⇄✕':'✕'}</button></td>
+    </tr>`;
+  }).join('') +
       `<tr style="background:var(--bg);font-weight:700;">
         <td colspan="4" style="padding:10px 12px;">Total</td>
         <td class="amt-pos">${fmt(totalCredit)}</td>
