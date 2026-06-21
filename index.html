@@ -357,6 +357,7 @@
       <a class="nav-item" onclick="showPage('banks')"><span class="ni">🏦</span> Bank Balances</a>
       <a class="nav-item" onclick="showPage('cards')"><span class="ni">💳</span> Card Reminders</a>
       <a class="nav-item" onclick="showPage('loans')"><span class="ni">🏠</span> Loans</a>
+      <a class="nav-item" onclick="showPage('overdraft')"><span class="ni">🔻</span> Overdraft</a>
       <div class="nav-section">Settings</div>
       <a class="nav-item" onclick="showPage('users')"><span class="ni">👥</span> Users <span id="pending-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:auto;"></span></a>
       <a class="nav-item" onclick="showPage('categories')"><span class="ni">🗂</span> Categories</a>
@@ -919,6 +920,97 @@
       </div>
     </div>
 
+    <!-- OVERDRAFT -->
+    <div id="page-overdraft" class="section">
+      <div class="page-header"><h2>Overdraft Accounts</h2><p>Track OD limits, utilisation and available balance across all banks</p></div>
+      <div class="content">
+
+        <!-- SUMMARY -->
+        <div class="metrics" id="od-metrics" style="margin-bottom:1.25rem;"></div>
+
+        <!-- UTILISATION CHART -->
+        <div class="card">
+          <div class="card-title">Overdraft utilisation — all banks</div>
+          <div id="od-chart-rows"></div>
+        </div>
+
+        <!-- OD ACCOUNTS LIST -->
+        <div id="od-list" style="margin-bottom:1rem;"></div>
+
+        <!-- ADD OD ACCOUNT -->
+        <div class="card">
+          <div class="card-title">➕ Add overdraft account</div>
+          <div class="form-row c4">
+            <div class="fl"><label>Bank name</label><input type="text" id="od-bank" placeholder="e.g. HDFC Bank"></div>
+            <div class="fl"><label>Account type</label>
+              <select id="od-type">
+                <option>Cash Credit (CC)</option>
+                <option>Overdraft (OD)</option>
+                <option>Working Capital</option>
+                <option>Export Credit</option>
+                <option>Dropline OD</option>
+                <option>Others</option>
+              </select>
+            </div>
+            <div class="fl"><label>Sanctioned limit (₹)</label><input type="number" id="od-limit" placeholder="Total OD limit" min="0" oninput="calcOD()"></div>
+            <div class="fl"><label>Amount utilised (₹)</label><input type="number" id="od-used" placeholder="Currently used" min="0" oninput="calcOD()"></div>
+          </div>
+          <div class="form-row c4">
+            <div class="fl"><label>Interest rate (% p.a.)</label><input type="number" id="od-rate" placeholder="e.g. 12.5" min="0" step="0.1" oninput="calcOD()"></div>
+            <div class="fl"><label>Renewal date</label><input type="date" id="od-renewal"></div>
+            <div class="fl"><label>Account number</label><input type="text" id="od-accno" placeholder="Last 4 digits" maxlength="4"></div>
+            <div class="fl"><label>Security / Collateral</label><input type="text" id="od-security" placeholder="e.g. Property, FD, Stocks"></div>
+          </div>
+          <!-- Live preview -->
+          <div id="od-preview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;" id="od-preview-grid"></div>
+          </div>
+          <div class="fl" style="margin-bottom:12px;"><label>Notes</label><input type="text" id="od-note" placeholder="Optional notes"></div>
+          <button class="btn green" onclick="addOD()">+ Add overdraft account</button>
+        </div>
+
+        <!-- TRANSACTION LEDGER -->
+        <div class="card" id="od-ledger-card" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap;">
+            <div class="card-title" style="margin:0;">📒 OD Ledger</div>
+            <select id="od-sel" onchange="renderODLedger()" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+            <input type="month" id="od-month" onchange="renderODLedger()" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;">
+            <button class="btn sm green" onclick="addODEntry()">+ Add entry</button>
+            <button class="btn sm blue" onclick="exportODStatement()">📊 Export</button>
+          </div>
+          <!-- Add entry form -->
+          <div id="od-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
+            <div class="form-row c4">
+              <div class="fl"><label>Date</label><input type="date" id="ode-date"></div>
+              <div class="fl"><label>Type</label>
+                <select id="ode-type">
+                  <option value="Debit">Debit (Withdrawal / Utilised)</option>
+                  <option value="Credit">Credit (Repayment / Deposited)</option>
+                  <option value="Interest">Interest charged</option>
+                  <option value="Charges">Bank charges</option>
+                </select>
+              </div>
+              <div class="fl"><label>Amount (₹)</label><input type="number" id="ode-amt" placeholder="0" min="0"></div>
+              <div class="fl"><label>Reference</label><input type="text" id="ode-ref" placeholder="Cheque / UTR no."></div>
+            </div>
+            <div class="fl" style="margin-bottom:10px;"><label>Description</label><input type="text" id="ode-desc" placeholder="e.g. Payment to supplier, Interest for March"></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn green sm" onclick="saveODEntry()">✓ Save</button>
+              <button class="btn sm" onclick="document.getElementById('od-entry-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+          <!-- Ledger table -->
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Reference</th><th style="color:var(--accent);">Credit (+)</th><th style="color:var(--red);">Debit (−)</th><th>Utilised</th><th>Available</th><th></th></tr></thead>
+              <tbody id="od-ledger-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- CATEGORIES -->
     <div id="page-categories" class="section">
       <div class="page-header"><h2>Categories</h2><p>Customise categories and sub-categories for all transaction types</p></div>
@@ -1041,6 +1133,7 @@
     <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('banks')"><span class="ni">🏦</span> Bank Balances</a>
     <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('cards')"><span class="ni">💳</span> Card Reminders</a>
     <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('loans')"><span class="ni">🏠</span> Loans</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('overdraft')"><span class="ni">🔻</span> Overdraft</a>
     <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Settings</div>
     <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('categories')"><span class="ni">🗂</span> Categories</a>
     <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('users')"><span class="ni">👥</span> Users</a>
@@ -1420,6 +1513,7 @@ function showPage(id) {
   }
   if (id === 'categories') renderCategories();
   if (id === 'loans') { document.getElementById('ln-start').value = today(); renderLoans(); }
+  if (id === 'overdraft') { renderOverdraft(); }
   if (id === 'banks') {
     document.getElementById('b-date').value = today();
     document.getElementById('bl-month').value = thisMonth();
@@ -3594,6 +3688,335 @@ function getOrdinal(n) {
   const s = ['th','st','nd','rd'];
   const v = n%100;
   return s[(v-20)%10]||s[v]||s[0];
+}
+
+// ===================== OVERDRAFT TRACKER =====================
+function getODs() { return JSON.parse(localStorage.getItem('fintrack_ods') || '[]'); }
+function saveODs(o) { localStorage.setItem('fintrack_ods', JSON.stringify(o)); }
+function getODEntries() { return JSON.parse(localStorage.getItem('fintrack_od_entries') || '[]'); }
+function saveODEntries(e) { localStorage.setItem('fintrack_od_entries', JSON.stringify(e)); }
+
+function calcOD() {
+  const limit = parseFloat(document.getElementById('od-limit').value) || 0;
+  const used  = parseFloat(document.getElementById('od-used').value) || 0;
+  const rate  = parseFloat(document.getElementById('od-rate').value) || 0;
+  if (!limit) { document.getElementById('od-preview').style.display = 'none'; return; }
+  document.getElementById('od-preview').style.display = 'block';
+  const available = limit - used;
+  const utilPct   = Math.round(used / limit * 100);
+  const monthlyInt = Math.round(used * rate / 12 / 100);
+  const barCol = utilPct > 80 ? 'var(--red)' : utilPct > 50 ? 'var(--amber)' : 'var(--accent)';
+  document.getElementById('od-preview-grid').innerHTML = `
+    <div><div style="font-size:11px;color:var(--text3);">Sanctioned limit</div><div style="font-size:15px;font-weight:700;">${fmt(limit)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Amount utilised</div><div style="font-size:15px;font-weight:700;color:var(--red);">${fmt(used)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Available balance</div><div style="font-size:15px;font-weight:700;color:var(--accent);">${fmt(available)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Utilisation</div><div style="font-size:15px;font-weight:700;color:${barCol};">${utilPct}%</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Est. monthly interest</div><div style="font-size:15px;font-weight:700;color:var(--amber);">${fmt(monthlyInt)}</div></div>
+  `;
+}
+
+function addOD() {
+  const bank     = document.getElementById('od-bank').value.trim();
+  const type     = document.getElementById('od-type').value;
+  const limit    = parseFloat(document.getElementById('od-limit').value) || 0;
+  const used     = parseFloat(document.getElementById('od-used').value) || 0;
+  const rate     = parseFloat(document.getElementById('od-rate').value) || 0;
+  const renewal  = document.getElementById('od-renewal').value;
+  const accno    = document.getElementById('od-accno').value.trim();
+  const security = document.getElementById('od-security').value.trim();
+  const note     = document.getElementById('od-note').value.trim();
+  if (!bank || !limit) { toast('Enter bank name and sanctioned limit.'); return; }
+  const od = { id: Date.now().toString(), bank, type, limit, used, rate, renewal, accno, security, note, addedOn: today() };
+  const ods = getODs();
+  ods.push(od);
+  saveODs(ods);
+  // Add opening entry
+  if (used > 0) {
+    const entries = getODEntries();
+    entries.push({ id: Date.now().toString()+'_ob', odId: od.id, date: today(), type: 'Debit', amount: used, desc: 'Opening utilisation balance', ref: '' });
+    saveODEntries(entries);
+  }
+  ['od-bank','od-limit','od-used','od-rate','od-accno','od-security','od-note'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('od-preview').style.display = 'none';
+  renderOverdraft();
+  toast('Overdraft account added ✓');
+}
+
+function deleteOD(id) {
+  if (!confirm('Remove this overdraft account and all its entries?')) return;
+  saveODs(getODs().filter(o => o.id !== id));
+  saveODEntries(getODEntries().filter(e => e.odId !== id));
+  renderOverdraft();
+  toast('Removed');
+}
+
+function getODUtilised(odId) {
+  return getODEntries().filter(e => e.odId === odId)
+    .reduce((sum, e) => sum + (['Debit','Interest','Charges'].includes(e.type) ? e.amount : -e.amount), 0);
+}
+
+function addODEntry() {
+  document.getElementById('od-entry-form').style.display = 'block';
+  document.getElementById('ode-date').value = today();
+}
+
+function saveODEntry() {
+  const odId = document.getElementById('od-sel').value;
+  const date  = document.getElementById('ode-date').value || today();
+  const type  = document.getElementById('ode-type').value;
+  const amt   = parseFloat(document.getElementById('ode-amt').value) || 0;
+  const ref   = document.getElementById('ode-ref').value.trim();
+  const desc  = document.getElementById('ode-desc').value.trim();
+  if (!amt || amt <= 0) { toast('Enter a valid amount.'); return; }
+  const entries = getODEntries();
+  entries.push({ id: Date.now().toString(), odId, date, type, amount: amt, desc: desc || type, ref });
+  saveODEntries(entries);
+  // Update OD utilised balance
+  const ods = getODs();
+  const od = ods.find(o => o.id === odId);
+  if (od) { od.used = Math.max(0, getODUtilised(odId)); saveODs(ods); }
+  document.getElementById('ode-amt').value = '';
+  document.getElementById('ode-desc').value = '';
+  document.getElementById('ode-ref').value = '';
+  document.getElementById('od-entry-form').style.display = 'none';
+  renderODLedger();
+  renderOverdraft();
+  toast(`${type} entry saved ✓`);
+}
+
+function deleteODEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  const entry = getODEntries().find(e => e.id === id);
+  saveODEntries(getODEntries().filter(e => e.id !== id));
+  if (entry) {
+    const ods = getODs();
+    const od = ods.find(o => o.id === entry.odId);
+    if (od) { od.used = Math.max(0, getODUtilised(entry.odId)); saveODs(ods); }
+  }
+  renderODLedger();
+  renderOverdraft();
+  toast('Deleted');
+}
+
+function renderODLedger() {
+  const ods = getODs();
+  const sel = document.getElementById('od-sel');
+  const prev = sel.value;
+  sel.innerHTML = ods.map(o => `<option value="${o.id}" ${o.id===prev?'selected':''}>${o.bank} — ${o.type}</option>`).join('');
+  const odId = sel.value;
+  const month = document.getElementById('od-month').value;
+  if (!odId) return;
+  const od = ods.find(o => o.id === odId);
+  if (!od) return;
+
+  let entries = getODEntries().filter(e => e.odId === odId);
+  if (month) entries = entries.filter(e => e.date.startsWith(month));
+  entries = entries.sort((a,b) => a.date.localeCompare(b.date));
+
+  // Running utilised balance
+  const allEntries = getODEntries().filter(e => e.odId === odId).sort((a,b) => a.date.localeCompare(b.date));
+  let runUtil = 0;
+  const utilMap = {};
+  allEntries.forEach(e => {
+    runUtil += ['Debit','Interest','Charges'].includes(e.type) ? e.amount : -e.amount;
+    runUtil = Math.max(0, runUtil);
+    utilMap[e.id] = runUtil;
+  });
+
+  const totalDebit  = entries.filter(e => ['Debit','Interest','Charges'].includes(e.type)).reduce((a,e)=>a+e.amount,0);
+  const totalCredit = entries.filter(e => e.type === 'Credit').reduce((a,e)=>a+e.amount,0);
+  const currentUtil = od.used || 0;
+  const available   = od.limit - currentUtil;
+
+  const tbody = document.getElementById('od-ledger-tbody');
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="ei">📒</div>No entries for this period</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = entries.map(e => {
+    const isDebit = ['Debit','Interest','Charges'].includes(e.type);
+    const util = utilMap[e.id] || 0;
+    const avail = od.limit - util;
+    return `<tr>
+      <td style="white-space:nowrap;">${e.date}</td>
+      <td>${e.desc||e.type}</td>
+      <td><span class="badge ${isDebit?'badge-Expenses':'badge-Income'}">${e.type}</span></td>
+      <td style="color:var(--text3);font-size:12px;">${e.ref||'—'}</td>
+      <td class="amt-pos">${!isDebit?fmt(e.amount):'—'}</td>
+      <td class="amt-neg">${isDebit?fmt(e.amount):'—'}</td>
+      <td style="font-weight:600;color:var(--red);">${fmt(util)}</td>
+      <td style="font-weight:600;color:var(--accent);">${fmt(Math.max(0,avail))}</td>
+      <td><button class="btn red sm" onclick="deleteODEntry('${e.id}')">✕</button></td>
+    </tr>`;
+  }).join('') + `
+  <tr style="background:var(--bg);font-weight:700;">
+    <td colspan="4" style="padding:10px 12px;">Total</td>
+    <td class="amt-pos">${fmt(totalCredit)}</td>
+    <td class="amt-neg">${fmt(totalDebit)}</td>
+    <td style="color:var(--red);">${fmt(currentUtil)}</td>
+    <td style="color:var(--accent);">${fmt(Math.max(0,available))}</td>
+    <td></td>
+  </tr>`;
+}
+
+function exportODStatement() {
+  const ods = getODs();
+  const odId = document.getElementById('od-sel').value;
+  const od = ods.find(o => o.id === odId);
+  if (!od) { toast('Select an account first.'); return; }
+  const month = document.getElementById('od-month').value;
+  let entries = getODEntries().filter(e => e.odId === odId);
+  if (month) entries = entries.filter(e => e.date.startsWith(month));
+  entries = entries.sort((a,b) => a.date.localeCompare(b.date));
+
+  let runUtil = 0;
+  const rows = [['Date','Description','Type','Reference','Credit (Repayment)','Debit (Utilised)','Utilised Balance','Available Balance']];
+  entries.forEach(e => {
+    const isDebit = ['Debit','Interest','Charges'].includes(e.type);
+    runUtil = Math.max(0, runUtil + (isDebit ? e.amount : -e.amount));
+    rows.push([e.date, e.desc||e.type, e.type, e.ref||'', !isDebit?e.amount:'', isDebit?e.amount:'', runUtil.toFixed(2), Math.max(0, od.limit - runUtil).toFixed(2)]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const infoRows = [
+    ['Overdraft Account Statement'],[''],
+    ['Bank:', od.bank], ['Account Type:', od.type],
+    ['Account No:', od.accno ? '••••'+od.accno : '—'],
+    ['Sanctioned Limit:', od.limit], ['Interest Rate:', od.rate+'% p.a.'],
+    ['Security/Collateral:', od.security||'—'],
+    ['Renewal Date:', od.renewal||'—'],
+    ['Period:', month||'All'], ['Generated:', today()],
+    [''], ['© 2026 Felevare Global Ventures LLP']
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), 'Account Info');
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [12,28,14,16,18,16,16,16].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'OD Statement');
+  XLSX.writeFile(wb, `${od.bank}_OD_Statement_${month||'All'}.xlsx`);
+  toast('OD statement exported ✓');
+}
+
+function renderOverdraft() {
+  const ods = getODs();
+  const today_str = today();
+
+  // Totals
+  const totalLimit     = ods.reduce((a,o) => a+o.limit, 0);
+  const totalUsed      = ods.reduce((a,o) => a+(o.used||0), 0);
+  const totalAvailable = totalLimit - totalUsed;
+  const totalUtilPct   = totalLimit > 0 ? Math.round(totalUsed/totalLimit*100) : 0;
+  const totalMonthlyInt = ods.reduce((a,o) => a + Math.round((o.used||0)*o.rate/12/100), 0);
+
+  // Renewal alerts
+  const soonRenew = ods.filter(o => {
+    if (!o.renewal) return false;
+    const days = daysDiff(today_str, o.renewal);
+    return days >= 0 && days <= 30;
+  });
+
+  document.getElementById('od-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">Total OD accounts</div><div class="m-value" style="color:var(--blue);">${ods.length}</div></div>
+    <div class="metric"><div class="m-label">Total sanctioned limit</div><div class="m-value">${fmt(totalLimit)}</div></div>
+    <div class="metric"><div class="m-label">Total utilised</div><div class="m-value m-expense">${fmt(totalUsed)}</div></div>
+    <div class="metric"><div class="m-label">Total available</div><div class="m-value m-income">${fmt(totalAvailable)}</div></div>
+    <div class="metric"><div class="m-label">Overall utilisation</div><div class="m-value" style="color:${totalUtilPct>80?'var(--red)':totalUtilPct>50?'var(--amber)':'var(--accent)'};">${totalUtilPct}%</div></div>
+    <div class="metric"><div class="m-label">Est. monthly interest</div><div class="m-value" style="color:var(--amber);">${fmt(totalMonthlyInt)}</div></div>
+  `;
+
+  // Renewal alerts
+  if (soonRenew.length) {
+    const alertHtml = soonRenew.map(o => `
+      <div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">
+        🔔 ${o.bank} (${o.type}) — OD renewal due on ${o.renewal} (${daysDiff(today_str,o.renewal)} days left). Limit: ${fmt(o.limit)}
+      </div>`).join('');
+    document.getElementById('od-metrics').insertAdjacentHTML('afterend', alertHtml);
+  }
+
+  // Utilisation bars
+  document.getElementById('od-chart-rows').innerHTML = ods.length ? ods.map(o => {
+    const used  = o.used || 0;
+    const pct   = o.limit > 0 ? Math.min(Math.round(used/o.limit*100),100) : 0;
+    const avail = Math.max(0, o.limit - used);
+    const barCol = pct>80?'var(--red)':pct>50?'var(--amber)':'var(--accent)';
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+        <span style="font-size:13px;font-weight:600;">${o.bank} <span style="font-size:11px;font-weight:400;color:var(--text2);">(${o.type})</span></span>
+        <span style="font-size:12px;color:var(--text2);">Used: <strong style="color:var(--red);">${fmt(used)}</strong> / Available: <strong style="color:var(--accent);">${fmt(avail)}</strong> / Limit: <strong>${fmt(o.limit)}</strong></span>
+      </div>
+      <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${barCol};border-radius:6px;transition:width 0.5s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:3px;">
+        <span style="font-size:11px;color:${barCol};font-weight:600;">${pct}% utilised</span>
+        <span style="font-size:11px;color:var(--text3);">${o.rate?o.rate+'% p.a.':''} ${o.renewal?'· Renewal: '+o.renewal:''}</span>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty"><div class="ei">🔻</div>No overdraft accounts yet</div>';
+
+  // OD Account cards
+  if (ods.length) {
+    document.getElementById('od-ledger-card').style.display = 'block';
+    document.getElementById('od-month').value = thisMonth();
+    const sel = document.getElementById('od-sel');
+    const prev = sel.value;
+    sel.innerHTML = ods.map(o=>`<option value="${o.id}" ${o.id===prev?'selected':''}>${o.bank} — ${o.type}</option>`).join('');
+    renderODLedger();
+  } else {
+    document.getElementById('od-ledger-card').style.display = 'none';
+  }
+
+  document.getElementById('od-list').innerHTML = ods.length ? ods.map(od => {
+    const used  = od.used || 0;
+    const avail = Math.max(0, od.limit - used);
+    const pct   = od.limit > 0 ? Math.min(Math.round(used/od.limit*100),100) : 0;
+    const barCol = pct>80?'var(--red)':pct>50?'var(--amber)':'var(--accent)';
+    const monthInt = Math.round(used * od.rate / 12 / 100);
+    const isExpiring = od.renewal && daysDiff(today_str,od.renewal) >= 0 && daysDiff(today_str,od.renewal) <= 30;
+    return `<div class="card" style="margin-bottom:0.75rem;${isExpiring?'border-color:var(--amber);':''}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="width:44px;height:44px;background:var(--red-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🔻</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:15px;">${od.bank} ${od.accno?'(••••'+od.accno+')':''}</div>
+          <div style="font-size:12px;color:var(--text2);">${od.type}${od.security?' · Security: '+od.security:''}${od.rate?' · '+od.rate+'% p.a.':''}</div>
+          ${isExpiring?`<div style="font-size:11px;color:var(--amber);font-weight:600;">⚠️ Renewal due: ${od.renewal} (${daysDiff(today_str,od.renewal)} days left)</div>`:''}
+        </div>
+        <button class="btn red sm" onclick="deleteOD('${od.id}')">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px;">
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Sanctioned limit</div>
+          <div style="font-size:15px;font-weight:700;">${fmt(od.limit)}</div>
+        </div>
+        <div style="background:var(--red-light);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Amount utilised</div>
+          <div style="font-size:15px;font-weight:700;color:var(--red);">${fmt(used)}</div>
+        </div>
+        <div style="background:var(--accent-light);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Available balance</div>
+          <div style="font-size:15px;font-weight:700;color:var(--accent);">${fmt(avail)}</div>
+        </div>
+        <div style="background:var(--amber-light);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Est. monthly interest</div>
+          <div style="font-size:15px;font-weight:700;color:var(--amber);">${od.rate?fmt(monthInt):'—'}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Renewal date</div>
+          <div style="font-size:15px;font-weight:700;">${od.renewal||'—'}</div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:11px;color:var(--text3);">Utilisation</span>
+          <span style="font-size:11px;font-weight:600;color:${barCol};">${pct}%</span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${barCol};border-radius:4px;transition:width 0.5s;"></div>
+        </div>
+      </div>
+      ${od.note?`<div style="font-size:12px;color:var(--text3);margin-top:8px;">📝 ${od.note}</div>`:''}
+    </div>`;
+  }).join('') : '';
 }
 
 // Keyboard: Enter to login
