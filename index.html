@@ -251,16 +251,25 @@
 
   /* RESPONSIVE */
   .mob-nav { display: none; }
+  .app-footer { text-align: center; padding: 1.5rem; font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); margin-top: 2rem; }
+  .mob-drawer {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 270px;
+    background: var(--navy); z-index: 600;
+    transform: translateX(-100%); transition: transform 0.28s ease;
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  .mob-drawer.open { transform: translateX(0) !important; }
+  .mob-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 599; display: none; }
+  .mob-overlay.open { display: block; }
   @media (max-width: 768px) {
-    .sidebar { width: 100%; height: 60px; bottom: auto; flex-direction: row; align-items: center; padding: 0 1rem; top: 0; overflow: hidden; }
+    .sidebar { width: 100%; height: 56px; bottom: auto; flex-direction: row; align-items: center; padding: 0 1rem; top: 0; overflow: hidden; }
     .sidebar-logo, .sidebar-user, .sidebar-nav, .nav-section, .sidebar-footer { display: none; }
     .sidebar .mob-brand { display: flex; align-items: center; gap: 8px; color: white; font-size: 16px; font-weight: 700; }
-    .main { margin-left: 0; margin-top: 60px; margin-bottom: 70px; }
+    .main { margin-left: 0; margin-top: 56px; margin-bottom: 64px; }
     .mob-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: var(--navy); z-index: 100; border-top: 1px solid var(--navy3); }
-    .mob-nav button { flex: 1; padding: 10px 4px; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 10px; cursor: pointer; font-family: inherit; transition: color 0.15s; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .mob-nav button { flex: 1; padding: 8px 2px; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 9px; cursor: pointer; font-family: inherit; transition: color 0.15s; display: flex; flex-direction: column; align-items: center; gap: 2px; }
     .mob-nav button.active { color: var(--accent); }
-    .mob-nav button .ni { font-size: 20px; }
-  .app-footer { text-align: center; padding: 1.5rem; font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); margin-top: 2rem; }
+    .mob-nav button .ni { font-size: 18px; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
     .form-row.c3, .form-row.c4 { grid-template-columns: 1fr 1fr; }
     .metrics { grid-template-columns: 1fr 1fr; }
@@ -269,6 +278,9 @@
   }
   @media (min-width: 769px) {
     .sidebar .mob-brand { display: none; }
+    .mob-drawer { transform: translateX(-100%) !important; pointer-events: none; }
+    .mob-overlay { display: none !important; }
+    .mob-nav { display: none !important; }
   }
 </style>
 </head>
@@ -944,49 +956,64 @@ async function syncFromSupabase() {
     saveLocalDB();
     showSyncStatus('Synced ✓', true);
   } catch(e) {
-    console.error('Sync error:', e);
-    showSyncStatus('Offline mode', false, true);
+    // Silent fail — use local data
+    showSyncStatus('Using local data', false, true);
   }
 }
 
 async function pushTransactionToSupa(t) {
-  return sbUpsert('fintrack_transactions', {
-    id: t.id, user_id: t.userId, user_name: t.userName,
-    date: t.date, type: t.type, cat: t.cat, sub: t.sub,
-    amount: t.amount, mode: t.mode, note: t.note,
-    tags: t.tags, recur: t.recur, recur_end: t.recurEnd,
-    is_recurring: t.isRecurring, recur_id: t.recurId,
-    recur_parent: t.recurParent, last_run: t.lastRun
-  });
+  try {
+    return await sbUpsert('fintrack_transactions', {
+      id: t.id, user_id: t.userId, user_name: t.userName,
+      date: t.date, type: t.type, cat: t.cat, sub: t.sub,
+      amount: t.amount, mode: t.mode, note: t.note,
+      tags: t.tags, recur: t.recur, recur_end: t.recurEnd,
+      is_recurring: t.isRecurring, recur_id: t.recurId,
+      recur_parent: t.recurParent, last_run: t.lastRun
+    });
+  } catch(e) { return false; }
 }
 
 async function pushUserToSupa(u) {
-  return sbUpsert('fintrack_users', {
-    id: u.id, name: u.name, username: u.email||u.username, pin: u.pin,
-    currency: u.currency, is_master_admin: u.isMasterAdmin||false,
-    status: u.status||'approved', created_at: u.createdAt
-  });
+  try {
+    return await sbUpsert('fintrack_users', {
+      id: u.id, name: u.name, username: u.email||u.username, pin: u.pin,
+      currency: u.currency, is_master_admin: u.isMasterAdmin||false,
+      status: u.status||'approved', created_at: u.createdAt
+    });
+  } catch(e) { return false; }
 }
 
 async function pushPendingToSupa(u) {
-  return sbUpsert('fintrack_pending_users', {
-    id: u.id, name: u.name, username: u.username, pin: u.pin,
-    currency: u.currency, status: 'pending', created_at: u.createdAt
-  });
+  try {
+    return await sbUpsert('fintrack_pending_users', {
+      id: u.id, name: u.name, username: u.email||u.username, pin: u.pin,
+      currency: u.currency, status: 'pending', created_at: u.createdAt
+    });
+  } catch(e) { return false; }
 }
 
 async function pushBudgetToSupa(userId, month, cat, amount) {
-  return sbUpsert('fintrack_budgets', {
-    id: userId + '_' + month + '_' + cat.replace(/\s/g,'_'),
-    user_id: userId, month, cat, amount
-  });
+  try {
+    return await sbUpsert('fintrack_budgets', {
+      id: userId + '_' + month + '_' + cat.replace(/[^a-zA-Z0-9]/g,'_'),
+      user_id: userId, month, cat, amount
+    });
+  } catch(e) { return false; }
 }
 
 function showSyncStatus(msg, success, warn) {
-  let el = document.getElementById('sync-status');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = success ? 'var(--accent)' : warn ? 'var(--amber)' : 'var(--text3)';
+  const el = document.getElementById('sync-status');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = success ? 'var(--accent)' : warn ? 'var(--amber)' : 'var(--text3)';
+  }
+  const mob = document.getElementById('mob-sync');
+  if (mob) {
+    mob.textContent = success ? '☁ ✓' : warn ? '☁ ?' : '☁';
+    mob.style.color = success ? 'rgba(22,163,74,0.7)' : warn ? 'rgba(217,119,6,0.7)' : 'rgba(255,255,255,0.3)';
+    mob.title = msg;
+  }
 }
 
 // ===================== LOCAL FALLBACK =====================
