@@ -461,6 +461,10 @@
           <div class="card-title">6-month net savings trend</div>
           <div class="chart-box" style="height:180px;"><canvas id="lineChart" role="img" aria-label="Line chart: net savings trend over 6 months"></canvas></div>
         </div>
+        <div class="card" id="gst-summary-card" style="display:none;">
+          <div class="card-title">🧾 GST Summary — This Month</div>
+          <div class="metrics" id="gst-metrics" style="margin-bottom:0;"></div>
+        </div>
       </div>
     </div>
 
@@ -499,6 +503,59 @@
               </select>
             </div>
             <div class="fl" id="rec-end-wrap" style="display:none;"><label>Recur until</label><input type="month" id="t-recur-end"></div>
+          </div>
+          <!-- GST SECTION -->
+          <div id="gst-section" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;">GST applicable?</label>
+              <label class="switch" style="margin-left:0;">
+                <input type="checkbox" id="t-gst-toggle" onchange="toggleGST(this.checked)">
+                <span class="slider"></span>
+              </label>
+              <span id="gst-toggle-label" style="font-size:12px;color:var(--text3);">Off</span>
+            </div>
+            <div id="gst-fields" style="display:none;">
+              <div class="form-row c4">
+                <div class="fl">
+                  <label>GST type</label>
+                  <select id="t-gst-type" onchange="calcGST()">
+                    <option value="sgst_cgst">SGST + CGST (Intra-state)</option>
+                    <option value="igst">IGST (Inter-state)</option>
+                  </select>
+                </div>
+                <div class="fl">
+                  <label>GST slab</label>
+                  <select id="t-gst-rate" onchange="calcGST()">
+                    <option value="0">0% (Exempt)</option>
+                    <option value="5">5% (Food, Essentials)</option>
+                    <option value="12">12% (Processed food, Hotels)</option>
+                    <option value="18" selected>18% (Services, Products)</option>
+                    <option value="28">28% (Luxury, Auto)</option>
+                  </select>
+                </div>
+                <div class="fl">
+                  <label>Amount incl. GST?</label>
+                  <select id="t-gst-incl" onchange="calcGST()">
+                    <option value="incl">Yes — amount includes GST</option>
+                    <option value="excl">No — amount excludes GST</option>
+                  </select>
+                </div>
+                <div class="fl">
+                  <label>GST Number (optional)</label>
+                  <input type="text" id="t-gst-no" placeholder="27XXXXX..." style="text-transform:uppercase;">
+                </div>
+              </div>
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-top:8px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;" id="gst-breakup">
+                  <div><div style="font-size:11px;color:var(--text3);">Principal</div><div id="gst-principal" style="font-size:14px;font-weight:600;">₹0</div></div>
+                  <div id="gst-sgst-box"><div style="font-size:11px;color:var(--text3);">SGST</div><div id="gst-sgst" style="font-size:14px;font-weight:600;color:var(--amber);">₹0</div></div>
+                  <div id="gst-cgst-box"><div style="font-size:11px;color:var(--text3);">CGST</div><div id="gst-cgst" style="font-size:14px;font-weight:600;color:var(--amber);">₹0</div></div>
+                  <div id="gst-igst-box" style="display:none;"><div style="font-size:11px;color:var(--text3);">IGST</div><div id="gst-igst" style="font-size:14px;font-weight:600;color:var(--amber);">₹0</div></div>
+                  <div><div style="font-size:11px;color:var(--text3);">Total GST</div><div id="gst-total" style="font-size:14px;font-weight:600;color:var(--red);">₹0</div></div>
+                  <div><div style="font-size:11px;color:var(--text3);">Grand Total</div><div id="gst-grand" style="font-size:14px;font-weight:700;color:var(--accent);">₹0</div></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="form-row c2" style="margin-bottom:14px;">
             <div class="fl"><label>Note</label><input type="text" id="t-note" placeholder="Optional note"></div>
@@ -1200,6 +1257,28 @@ function updateSub() {
     sel.style.opacity = '0.5';
     sel.style.background = 'var(--bg)';
   }
+  suggestGSTSlab(cat);
+}
+
+const GST_SLABS = {
+  'Grocery': 0, 'Milk': 0, 'Vegetables': 0, 'Medicines': 0, 'Education': 0,
+  'Entertainment': 5, 'Domestic Travel': 5, 'International Travel': 18,
+  'Fuel': 28, 'Grooming': 18, 'Medical Bills': 5,
+  'Capital Purchase': 18, 'Furniture & Fixtures': 18,
+  'House Repair': 18, 'Electricity': 18, 'Commuting': 5,
+  'Credit Card': 18, 'Society Maintenance': 18,
+  'Helper / Cook': 0, 'Loans': 0, 'Donation': 0,
+  'Salary': 0, 'Rent': 18, 'Consultancy': 18, 'Coaching': 18, 'Business': 18,
+  'Insurance': 18, 'Mutual Funds': 18, 'Fixed Deposit': 0, 'Shares': 0,
+};
+
+function suggestGSTSlab(cat) {
+  const rateEl = document.getElementById('t-gst-rate');
+  if (!rateEl) return;
+  if (cat in GST_SLABS) {
+    rateEl.value = GST_SLABS[cat];
+    calcGST();
+  }
 }
 
 function setType(t) {
@@ -1222,6 +1301,26 @@ function today() { return new Date().toISOString().split('T')[0]; }
 function thisMonth() { return today().slice(0,7); }
 
 function saveTransaction(txnData) {
+  let gstData = {};
+  if (!txnData) {
+    const gstOn = document.getElementById('t-gst-toggle').checked;
+    if (gstOn) {
+      const rate = parseFloat(document.getElementById('t-gst-rate').value) || 0;
+      const gstType = document.getElementById('t-gst-type').value;
+      const incl = document.getElementById('t-gst-incl').value === 'incl';
+      const rawAmt = parseFloat(document.getElementById('t-amt').value) || 0;
+      const principal = incl ? rawAmt / (1 + rate/100) : rawAmt;
+      const totalGST = principal * rate / 100;
+      const sgst = gstType === 'sgst_cgst' ? totalGST / 2 : 0;
+      const cgst = gstType === 'sgst_cgst' ? totalGST / 2 : 0;
+      const igst = gstType === 'igst' ? totalGST : 0;
+      gstData = { gstOn: true, gstRate: rate, gstType, principal: Math.round(principal*100)/100,
+        sgst: Math.round(sgst*100)/100, cgst: Math.round(cgst*100)/100,
+        igst: Math.round(igst*100)/100, totalGST: Math.round(totalGST*100)/100,
+        grandTotal: Math.round((principal+totalGST)*100)/100,
+        gstNo: document.getElementById('t-gst-no').value };
+    }
+  }
   const t = txnData || {
     id: Date.now().toString(),
     userId: currentUser.id,
@@ -1237,7 +1336,8 @@ function saveTransaction(txnData) {
     recur: document.getElementById('t-recur').value,
     recurEnd: document.getElementById('t-recur-end').value,
     isRecurring: !!document.getElementById('t-recur').value,
-    recurId: document.getElementById('t-recur').value ? Date.now().toString() : null
+    recurId: document.getElementById('t-recur').value ? Date.now().toString() : null,
+    ...gstData
   };
   if (!t.amount || t.amount <= 0) { toast('Enter a valid amount.'); return; }
   DB.transactions.unshift(t);
@@ -1249,6 +1349,9 @@ function saveTransaction(txnData) {
     document.getElementById('t-tags').value = '';
     document.getElementById('t-recur').value = '';
     document.getElementById('rec-end-wrap').style.display = 'none';
+    document.getElementById('t-gst-toggle').checked = false;
+    document.getElementById('t-gst-no').value = '';
+    toggleGST(false);
     toast('Transaction saved ✓');
   }
 }
@@ -1327,7 +1430,16 @@ function renderTxns() {
         <td><span class="badge badge-${t.type}">${t.type}</span></td>
         <td>${t.cat}</td>
         <td style="color:var(--text2);">${t.sub||'—'}</td>
-        <td class="${t.type==='Income'?'amt-pos':'amt-neg'}">${fmt(t.amount)}</td>
+        <td class="${t.type==='Income'?'amt-pos':'amt-neg'}">
+          ${fmt(t.amount)}
+          ${t.gstOn ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">
+            Principal: ${fmt(t.principal)}
+            ${t.gstType==='sgst_cgst'
+              ? `· SGST: ${fmt(t.sgst)} · CGST: ${fmt(t.cgst)}`
+              : `· IGST: ${fmt(t.igst)}`}
+            · GST: ${fmt(t.totalGST)} (${t.gstRate}%)
+          </div>` : ''}
+        </td>
         <td style="color:var(--text2);">${t.mode||'—'}</td>
         <td style="color:var(--text2);">${t.userName||'—'}</td>
         <td style="color:var(--text2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.note||''}">${t.note||'—'}</td>
@@ -1505,6 +1617,22 @@ function renderDashboard() {
       plugins:{legend:{display:false}},
       scales:{y:{ticks:{callback:v=>C()+Number(v).toLocaleString('en-IN')},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false}}} }
   });
+
+  // GST Summary
+  const gst = getGSTSummary(mtxns);
+  const gstCard = document.getElementById('gst-summary-card');
+  if (gst.count > 0) {
+    gstCard.style.display = 'block';
+    document.getElementById('gst-metrics').innerHTML = `
+      <div class="metric"><div class="m-label">GST Transactions</div><div class="m-value" style="color:var(--blue);">${gst.count}</div></div>
+      <div class="metric"><div class="m-label">Total GST Paid</div><div class="m-value" style="color:var(--amber);">${fmt(gst.totalGST)}</div></div>
+      <div class="metric"><div class="m-label">SGST</div><div class="m-value" style="color:var(--amber);">${fmt(gst.totalSGST)}</div></div>
+      <div class="metric"><div class="m-label">CGST</div><div class="m-value" style="color:var(--amber);">${fmt(gst.totalCGST)}</div></div>
+      <div class="metric"><div class="m-label">IGST</div><div class="m-value" style="color:var(--purple);">${fmt(gst.totalIGST)}</div></div>
+    `;
+  } else {
+    gstCard.style.display = 'none';
+  }
 }
 
 // ===================== BUDGET =====================
@@ -2586,6 +2714,59 @@ Please log in to approve or reject this request.`
     });
     console.log('Approval email sent');
   } catch(e) { console.log('Email not configured:', e); }
+}
+
+// ===================== GST MODULE =====================
+function toggleGST(on) {
+  document.getElementById('gst-fields').style.display = on ? 'block' : 'none';
+  document.getElementById('gst-toggle-label').textContent = on ? 'On' : 'Off';
+  if (on) calcGST();
+}
+
+function calcGST() {
+  const rawAmt = parseFloat(document.getElementById('t-amt').value) || 0;
+  const rate   = parseFloat(document.getElementById('t-gst-rate').value) || 0;
+  const gstType = document.getElementById('t-gst-type').value;
+  const incl   = document.getElementById('t-gst-incl').value === 'incl';
+  const curr   = C();
+
+  const principal = incl ? rawAmt / (1 + rate/100) : rawAmt;
+  const totalGST  = principal * rate / 100;
+  const sgst = gstType === 'sgst_cgst' ? totalGST / 2 : 0;
+  const cgst = gstType === 'sgst_cgst' ? totalGST / 2 : 0;
+  const igst = gstType === 'igst' ? totalGST : 0;
+  const grand = principal + totalGST;
+
+  const f = n => curr + n.toFixed(2);
+  document.getElementById('gst-principal').textContent = f(principal);
+  document.getElementById('gst-sgst').textContent = f(sgst);
+  document.getElementById('gst-cgst').textContent = f(cgst);
+  document.getElementById('gst-igst').textContent = f(igst);
+  document.getElementById('gst-total').textContent = f(totalGST);
+  document.getElementById('gst-grand').textContent = f(grand);
+
+  // Show/hide SGST+CGST vs IGST boxes
+  document.getElementById('gst-sgst-box').style.display = gstType === 'sgst_cgst' ? 'block' : 'none';
+  document.getElementById('gst-cgst-box').style.display = gstType === 'sgst_cgst' ? 'block' : 'none';
+  document.getElementById('gst-igst-box').style.display = gstType === 'igst' ? 'block' : 'none';
+}
+
+// Recalculate GST when amount changes
+document.addEventListener('DOMContentLoaded', () => {
+  const amtEl = document.getElementById('t-amt');
+  if (amtEl) amtEl.addEventListener('input', () => {
+    if (document.getElementById('t-gst-toggle').checked) calcGST();
+  });
+});
+
+// GST Summary for dashboard
+function getGSTSummary(data) {
+  const gstTxns = data.filter(t => t.gstOn);
+  const totalGST = gstTxns.reduce((a,t) => a + (t.totalGST||0), 0);
+  const totalSGST = gstTxns.reduce((a,t) => a + (t.sgst||0), 0);
+  const totalCGST = gstTxns.reduce((a,t) => a + (t.cgst||0), 0);
+  const totalIGST = gstTxns.reduce((a,t) => a + (t.igst||0), 0);
+  return { count: gstTxns.length, totalGST, totalSGST, totalCGST, totalIGST };
 }
 
 // Keyboard: Enter to login
