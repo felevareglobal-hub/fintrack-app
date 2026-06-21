@@ -252,15 +252,17 @@
   /* RESPONSIVE */
   .mob-nav { display: none; }
   .app-footer { text-align: center; padding: 1.5rem; font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); margin-top: 2rem; }
-  .mob-drawer {
-    position: fixed; top: 0; left: 0; bottom: 0; width: 270px;
-    background: var(--navy); z-index: 600;
-    transform: translateX(-100%); transition: transform 0.28s ease;
-    display: flex; flex-direction: column; overflow-y: auto;
+  /* FULLSCREEN MOBILE MENU */
+  #mob-menu {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--navy);
+    z-index: 9999;
+    overflow-y: auto;
+    flex-direction: column;
   }
-  .mob-drawer.open { transform: translateX(0) !important; }
-  .mob-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 599; display: none; }
-  .mob-overlay.open { display: block; }
+  #mob-menu.open { display: flex !important; }
   @media (max-width: 768px) {
     .sidebar { width: 100%; height: 56px; bottom: auto; flex-direction: row; align-items: center; padding: 0 1rem; top: 0; overflow: hidden; }
     .sidebar-logo, .sidebar-user, .sidebar-nav, .nav-section, .sidebar-footer { display: none; }
@@ -278,8 +280,7 @@
   }
   @media (min-width: 769px) {
     .sidebar .mob-brand { display: none; }
-    .mob-drawer { transform: translateX(-100%) !important; pointer-events: none; }
-    .mob-overlay { display: none !important; }
+    #mob-menu { display: none !important; }
     .mob-nav { display: none !important; }
   }
 </style>
@@ -1016,35 +1017,39 @@
   </div>
 </div>
 
-<!-- MOBILE OVERLAY + DRAWER — outside #app so always accessible -->
-<div class="mob-overlay" id="mob-overlay" onclick="closeDrawer()"></div>
-<div class="mob-drawer" id="mob-drawer">
-  <div style="padding:1rem;border-bottom:1px solid var(--navy3);display:flex;align-items:center;justify-content:space-between;">
-    <div style="display:flex;align-items:center;gap:8px;color:white;font-size:16px;font-weight:700;"><span>💰</span>FinTrack</div>
-    <button onclick="closeDrawer()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;padding:4px 8px;">✕</button>
+<!-- FULLSCREEN MOBILE MENU -->
+<div id="mob-menu">
+  <!-- Header -->
+  <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--navy3);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;color:white;font-size:18px;font-weight:700;">
+      <span>💰</span> FinTrack
+    </div>
+    <button onclick="closeDrawer()" style="background:rgba(255,255,255,0.1);border:none;color:white;font-size:18px;cursor:pointer;padding:8px 12px;border-radius:8px;line-height:1;">✕ Close</button>
   </div>
-  <div style="padding:0.5rem 0;flex:1;overflow-y:auto;">
-    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Overview</div>
-    <a class="nav-item" onclick="showPage('dashboard');closeDrawer()"><span class="ni">📊</span> Dashboard</a>
-    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Money</div>
-    <a class="nav-item" onclick="showPage('add');closeDrawer()"><span class="ni">➕</span> Add Transaction</a>
-    <a class="nav-item" onclick="showPage('transactions');closeDrawer()"><span class="ni">📋</span> Transactions</a>
-    <a class="nav-item" onclick="showPage('recurring');closeDrawer()"><span class="ni">🔄</span> Recurring</a>
-    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Planning</div>
-    <a class="nav-item" onclick="showPage('budget');closeDrawer()"><span class="ni">🎯</span> Budget</a>
-    <a class="nav-item" onclick="showPage('fy');closeDrawer()"><span class="ni">📅</span> Financial Year</a>
-    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Tracking</div>
-    <a class="nav-item" onclick="showPage('banks');closeDrawer()"><span class="ni">🏦</span> Bank Balances</a>
-    <a class="nav-item" onclick="showPage('cards');closeDrawer()"><span class="ni">💳</span> Card Reminders</a>
-    <a class="nav-item" onclick="showPage('loans');closeDrawer()"><span class="ni">🏠</span> Loans</a>
-    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Settings</div>
-    <a class="nav-item" onclick="showPage('categories');closeDrawer()"><span class="ni">🗂</span> Categories</a>
-    <a class="nav-item" onclick="showPage('users');closeDrawer()"><span class="ni">👥</span> Users</a>
-    <a class="nav-item" onclick="showPage('export');closeDrawer()"><span class="ni">📤</span> Export / Import</a>
+  <!-- Menu items -->
+  <div style="padding:0.75rem 0;flex:1;overflow-y:auto;">
+    <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Overview</div>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('dashboard')"><span class="ni">📊</span> Dashboard</a>
+    <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Money</div>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('add')"><span class="ni">➕</span> Add Transaction</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('transactions')"><span class="ni">📋</span> Transactions</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('recurring')"><span class="ni">🔄</span> Recurring</a>
+    <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Planning</div>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('budget')"><span class="ni">🎯</span> Budget</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('fy')"><span class="ni">📅</span> Financial Year</a>
+    <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Tracking</div>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('banks')"><span class="ni">🏦</span> Bank Balances</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('cards')"><span class="ni">💳</span> Card Reminders</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('loans')"><span class="ni">🏠</span> Loans</a>
+    <div style="padding:0.4rem 1.25rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.35);font-weight:700;">Settings</div>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('categories')"><span class="ni">🗂</span> Categories</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('users')"><span class="ni">👥</span> Users</a>
+    <a class="nav-item" style="padding:14px 1.25rem;font-size:15px;" onclick="mobGo('export')"><span class="ni">📤</span> Export / Import</a>
   </div>
-  <div style="padding:0.75rem 1rem;border-top:1px solid var(--navy3);">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-      <span style="font-size:12px;color:rgba(255,255,255,0.4);">🌙 Dark mode</span>
+  <!-- Footer -->
+  <div style="padding:1rem 1.25rem;border-top:1px solid var(--navy3);flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <span style="font-size:13px;color:rgba(255,255,255,0.5);">🌙 Dark mode</span>
       <label class="switch" style="margin-left:auto;">
         <input type="checkbox" id="dark-toggle-mob" onchange="toggleDark(this.checked);document.getElementById('dark-toggle').checked=this.checked;">
         <span class="slider"></span>
@@ -2606,21 +2611,23 @@ async function manualSync() {
 
 // ===================== MOBILE DRAWER =====================
 function openDrawer() {
-  const drawer = document.getElementById('mob-drawer');
-  const overlay = document.getElementById('mob-overlay');
-  if (!drawer || !overlay) return;
-  drawer.classList.add('open');
-  overlay.classList.add('open');
-  // Sync dark toggle state
+  const menu = document.getElementById('mob-menu');
+  if (!menu) return;
+  menu.classList.add('open');
+  document.body.style.overflow = 'hidden';
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const mobTog = document.getElementById('dark-toggle-mob');
   if (mobTog) mobTog.checked = isDark;
 }
 function closeDrawer() {
-  const drawer = document.getElementById('mob-drawer');
-  const overlay = document.getElementById('mob-overlay');
-  if (drawer) drawer.classList.remove('open');
-  if (overlay) overlay.classList.remove('open');
+  const menu = document.getElementById('mob-menu');
+  if (!menu) return;
+  menu.classList.remove('open');
+  document.body.style.overflow = '';
+}
+function mobGo(page) {
+  closeDrawer();
+  setTimeout(() => showPage(page), 50);
 }
 
 // ===================== DARK MODE =====================
