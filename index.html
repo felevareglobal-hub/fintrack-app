@@ -355,6 +355,7 @@
       <div class="nav-section">Tracking</div>
       <a class="nav-item" onclick="showPage('banks')"><span class="ni">🏦</span> Bank Balances</a>
       <a class="nav-item" onclick="showPage('cards')"><span class="ni">💳</span> Card Reminders</a>
+      <a class="nav-item" onclick="showPage('loans')"><span class="ni">🏠</span> Loans</a>
       <div class="nav-section">Settings</div>
       <a class="nav-item" onclick="showPage('users')"><span class="ni">👥</span> Users <span id="pending-badge" style="display:none;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:auto;"></span></a>
       <a class="nav-item" onclick="showPage('categories')"><span class="ni">🗂</span> Categories</a>
@@ -378,44 +379,6 @@
   </nav>
 
   <!-- MOBILE OVERLAY -->
-  <div class="mob-overlay" id="mob-overlay" onclick="closeDrawer()"></div>
-
-  <!-- MOBILE DRAWER (slide-out full menu) -->
-  <div class="mob-drawer" id="mob-drawer">
-    <div style="padding:1rem;border-bottom:1px solid var(--navy3);display:flex;align-items:center;justify-content:space-between;">
-      <div style="display:flex;align-items:center;gap:8px;color:white;font-size:16px;font-weight:700;"><span>💰</span>FinTrack</div>
-      <button onclick="closeDrawer()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;">✕</button>
-    </div>
-    <div style="padding:0.5rem 0;flex:1;">
-      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Overview</div>
-      <a class="nav-item" onclick="showPage('dashboard');closeDrawer()"><span class="ni">📊</span> Dashboard</a>
-      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Money</div>
-      <a class="nav-item" onclick="showPage('add');closeDrawer()"><span class="ni">➕</span> Add Transaction</a>
-      <a class="nav-item" onclick="showPage('transactions');closeDrawer()"><span class="ni">📋</span> Transactions</a>
-      <a class="nav-item" onclick="showPage('recurring');closeDrawer()"><span class="ni">🔄</span> Recurring</a>
-      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Planning</div>
-      <a class="nav-item" onclick="showPage('budget');closeDrawer()"><span class="ni">🎯</span> Budget</a>
-      <a class="nav-item" onclick="showPage('fy');closeDrawer()"><span class="ni">📅</span> Financial Year</a>
-      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Tracking</div>
-      <a class="nav-item" onclick="showPage('banks');closeDrawer()"><span class="ni">🏦</span> Bank Balances</a>
-      <a class="nav-item" onclick="showPage('cards');closeDrawer()"><span class="ni">💳</span> Card Reminders</a>
-      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Settings</div>
-      <a class="nav-item" onclick="showPage('categories');closeDrawer()"><span class="ni">🗂</span> Categories</a>
-      <a class="nav-item" onclick="showPage('users');closeDrawer()"><span class="ni">👥</span> Users</a>
-      <a class="nav-item" onclick="showPage('export');closeDrawer()"><span class="ni">📤</span> Export / Import</a>
-    </div>
-    <div style="padding:0.75rem 1rem;border-top:1px solid var(--navy3);">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <span style="font-size:12px;color:rgba(255,255,255,0.4);">🌙 Dark mode</span>
-        <label class="switch" style="margin-left:auto;">
-          <input type="checkbox" id="dark-toggle-mob" onchange="toggleDark(this.checked);document.getElementById('dark-toggle').checked=this.checked;">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
-    </div>
-  </div>
-
   <!-- MOBILE BOTTOM NAV — 5 key pages + More -->
   <div class="mob-nav">
     <button onclick="showPage('dashboard')" id="mn-dashboard"><span class="ni">📊</span>Home</button>
@@ -873,6 +836,88 @@
       </div>
     </div>
 
+    <!-- LOANS -->
+    <div id="page-loans" class="section">
+      <div class="page-header"><h2>Loan Tracker</h2><p>Track all running loans — EMI, tenure, outstanding balance</p></div>
+      <div class="content">
+
+        <!-- SUMMARY METRICS -->
+        <div class="metrics" id="loan-metrics" style="margin-bottom:1.25rem;"></div>
+
+        <!-- ALERTS -->
+        <div id="loan-alerts" style="margin-bottom:1rem;"></div>
+
+        <!-- LOAN CARDS -->
+        <div id="loan-list" style="margin-bottom:1rem;"></div>
+
+        <!-- ADD LOAN -->
+        <div class="card">
+          <div class="card-title">➕ Add new loan</div>
+          <div class="form-row c4">
+            <div class="fl"><label>Loan type</label>
+              <select id="ln-type">
+                <option>Home Loan</option>
+                <option>Personal Loan</option>
+                <option>Car Loan</option>
+                <option>Education Loan</option>
+                <option>Business Loan</option>
+                <option>Gold Loan</option>
+                <option>Loan Against Property</option>
+                <option>Two Wheeler Loan</option>
+                <option>Consumer Durable Loan</option>
+                <option>Others</option>
+              </select>
+            </div>
+            <div class="fl"><label>Lender name</label><input type="text" id="ln-lender" placeholder="e.g. HDFC Bank, SBI"></div>
+            <div class="fl"><label>Loan amount (₹)</label><input type="number" id="ln-amount" placeholder="0" min="0"></div>
+            <div class="fl"><label>Outstanding (₹)</label><input type="number" id="ln-outstanding" placeholder="Current balance" min="0"></div>
+          </div>
+          <div class="form-row c4">
+            <div class="fl"><label>EMI amount (₹)</label><input type="number" id="ln-emi" placeholder="0" min="0" oninput="calcLoanDetails()"></div>
+            <div class="fl"><label>Interest rate (%)</label><input type="number" id="ln-rate" placeholder="e.g. 8.5" min="0" step="0.1" oninput="calcLoanDetails()"></div>
+            <div class="fl"><label>EMI date (day)</label><input type="number" id="ln-emidate" placeholder="e.g. 5" min="1" max="31"></div>
+            <div class="fl"><label>Loan start date</label><input type="date" id="ln-start"></div>
+          </div>
+          <div class="form-row c4">
+            <div class="fl"><label>Total tenure (months)</label><input type="number" id="ln-tenure" placeholder="e.g. 240" min="1" oninput="calcLoanDetails()"></div>
+            <div class="fl"><label>EMIs paid so far</label><input type="number" id="ln-paid" placeholder="0" min="0" oninput="calcLoanDetails()"></div>
+            <div class="fl"><label>Loan account number</label><input type="text" id="ln-accno" placeholder="Optional"></div>
+            <div class="fl"><label>Co-applicant</label><input type="text" id="ln-coapplicant" placeholder="Optional"></div>
+          </div>
+          <!-- LIVE CALCULATOR -->
+          <div id="loan-calc-preview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;">📊 Loan preview</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;" id="loan-calc-grid"></div>
+          </div>
+          <div class="fl" style="margin-bottom:12px;"><label>Notes</label><input type="text" id="ln-note" placeholder="e.g. Property address, vehicle number"></div>
+          <button class="btn green" onclick="addLoan()">+ Add loan</button>
+        </div>
+
+        <!-- AMORTISATION SCHEDULE -->
+        <div class="card" id="loan-amort-card" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap;">
+            <div class="card-title" style="margin:0;">📅 Amortisation Schedule</div>
+            <select id="amort-loan-sel" onchange="renderAmortisation()" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+            <button class="btn sm blue" onclick="exportLoanStatement()">📊 Export Excel</button>
+            <button class="btn sm" onclick="exportLoanCSV()">📄 Export CSV</button>
+          </div>
+          <div class="metrics" id="amort-metrics" style="margin-bottom:1rem;"></div>
+          <div class="chart-box" style="height:220px;margin-bottom:1rem;"><canvas id="loanChart" role="img" aria-label="Loan outstanding trend"></canvas></div>
+          <div class="tbl-wrap" style="max-height:400px;overflow-y:auto;">
+            <table>
+              <thead style="position:sticky;top:0;background:var(--surface);z-index:1;">
+                <tr>
+                  <th>#</th><th>Month</th><th>EMI</th><th>Principal</th><th>Interest</th><th>Outstanding</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="amort-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- CATEGORIES -->
     <div id="page-categories" class="section">
       <div class="page-header"><h2>Categories</h2><p>Customise categories and sub-categories for all transaction types</p></div>
@@ -968,6 +1013,44 @@
       <button class="btn" onclick="closeEditModal()">Cancel</button>
       <button class="btn green" onclick="saveEditTransaction()">✓ Save changes</button>
     </div>
+  </div>
+</div>
+
+<!-- MOBILE OVERLAY + DRAWER — outside #app so always accessible -->
+<div class="mob-overlay" id="mob-overlay" onclick="closeDrawer()"></div>
+<div class="mob-drawer" id="mob-drawer">
+  <div style="padding:1rem;border-bottom:1px solid var(--navy3);display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:8px;color:white;font-size:16px;font-weight:700;"><span>💰</span>FinTrack</div>
+    <button onclick="closeDrawer()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;padding:4px 8px;">✕</button>
+  </div>
+  <div style="padding:0.5rem 0;flex:1;overflow-y:auto;">
+    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Overview</div>
+    <a class="nav-item" onclick="showPage('dashboard');closeDrawer()"><span class="ni">📊</span> Dashboard</a>
+    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Money</div>
+    <a class="nav-item" onclick="showPage('add');closeDrawer()"><span class="ni">➕</span> Add Transaction</a>
+    <a class="nav-item" onclick="showPage('transactions');closeDrawer()"><span class="ni">📋</span> Transactions</a>
+    <a class="nav-item" onclick="showPage('recurring');closeDrawer()"><span class="ni">🔄</span> Recurring</a>
+    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Planning</div>
+    <a class="nav-item" onclick="showPage('budget');closeDrawer()"><span class="ni">🎯</span> Budget</a>
+    <a class="nav-item" onclick="showPage('fy');closeDrawer()"><span class="ni">📅</span> Financial Year</a>
+    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Tracking</div>
+    <a class="nav-item" onclick="showPage('banks');closeDrawer()"><span class="ni">🏦</span> Bank Balances</a>
+    <a class="nav-item" onclick="showPage('cards');closeDrawer()"><span class="ni">💳</span> Card Reminders</a>
+    <a class="nav-item" onclick="showPage('loans');closeDrawer()"><span class="ni">🏠</span> Loans</a>
+    <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Settings</div>
+    <a class="nav-item" onclick="showPage('categories');closeDrawer()"><span class="ni">🗂</span> Categories</a>
+    <a class="nav-item" onclick="showPage('users');closeDrawer()"><span class="ni">👥</span> Users</a>
+    <a class="nav-item" onclick="showPage('export');closeDrawer()"><span class="ni">📤</span> Export / Import</a>
+  </div>
+  <div style="padding:0.75rem 1rem;border-top:1px solid var(--navy3);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="font-size:12px;color:rgba(255,255,255,0.4);">🌙 Dark mode</span>
+      <label class="switch" style="margin-left:auto;">
+        <input type="checkbox" id="dark-toggle-mob" onchange="toggleDark(this.checked);document.getElementById('dark-toggle').checked=this.checked;">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
   </div>
 </div>
 
@@ -1331,6 +1414,7 @@ function showPage(id) {
     renderUsers();
   }
   if (id === 'categories') renderCategories();
+  if (id === 'loans') { document.getElementById('ln-start').value = today(); renderLoans(); }
   if (id === 'banks') {
     document.getElementById('b-date').value = today();
     document.getElementById('bl-month').value = thisMonth();
@@ -2522,16 +2606,21 @@ async function manualSync() {
 
 // ===================== MOBILE DRAWER =====================
 function openDrawer() {
-  document.getElementById('mob-drawer').classList.add('open');
-  document.getElementById('mob-overlay').classList.add('open');
+  const drawer = document.getElementById('mob-drawer');
+  const overlay = document.getElementById('mob-overlay');
+  if (!drawer || !overlay) return;
+  drawer.classList.add('open');
+  overlay.classList.add('open');
   // Sync dark toggle state
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const mobTog = document.getElementById('dark-toggle-mob');
   if (mobTog) mobTog.checked = isDark;
 }
 function closeDrawer() {
-  document.getElementById('mob-drawer').classList.remove('open');
-  document.getElementById('mob-overlay').classList.remove('open');
+  const drawer = document.getElementById('mob-drawer');
+  const overlay = document.getElementById('mob-overlay');
+  if (drawer) drawer.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
 }
 
 // ===================== DARK MODE =====================
@@ -3171,6 +3260,333 @@ function getGSTSummary(data) {
   const totalCGST = gstTxns.reduce((a,t) => a + (t.cgst||0), 0);
   const totalIGST = gstTxns.reduce((a,t) => a + (t.igst||0), 0);
   return { count: gstTxns.length, totalGST, totalSGST, totalCGST, totalIGST };
+}
+
+// ===================== LOAN TRACKER =====================
+let loanChart2;
+function getLoans() { return JSON.parse(localStorage.getItem('fintrack_loans') || '[]'); }
+function saveLoans(l) { localStorage.setItem('fintrack_loans', JSON.stringify(l)); }
+
+function calcLoanDetails() {
+  const emi      = parseFloat(document.getElementById('ln-emi').value) || 0;
+  const rate     = parseFloat(document.getElementById('ln-rate').value) || 0;
+  const tenure   = parseInt(document.getElementById('ln-tenure').value) || 0;
+  const paid     = parseInt(document.getElementById('ln-paid').value) || 0;
+  const amount   = parseFloat(document.getElementById('ln-amount').value) || 0;
+  const outstanding = parseFloat(document.getElementById('ln-outstanding').value) || 0;
+
+  if (!emi && !tenure) { document.getElementById('loan-calc-preview').style.display='none'; return; }
+  document.getElementById('loan-calc-preview').style.display = 'block';
+
+  const remaining   = tenure - paid;
+  const totalPayable = emi * tenure;
+  const totalInterest = totalPayable - amount;
+  const monthlyRate = rate / 12 / 100;
+  const estOutstanding = outstanding || (emi && monthlyRate > 0
+    ? emi * (1 - Math.pow(1 + monthlyRate, -remaining)) / monthlyRate
+    : emi * remaining);
+
+  document.getElementById('loan-calc-grid').innerHTML = `
+    <div><div style="font-size:11px;color:var(--text3);">EMIs remaining</div><div style="font-size:16px;font-weight:700;color:var(--red);">${remaining}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Est. outstanding</div><div style="font-size:16px;font-weight:700;color:var(--red);">${fmt(estOutstanding)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Total payable</div><div style="font-size:16px;font-weight:700;">${fmt(totalPayable)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Total interest</div><div style="font-size:16px;font-weight:700;color:var(--amber);">${fmt(totalInterest > 0 ? totalInterest : 0)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Monthly EMI</div><div style="font-size:16px;font-weight:700;color:var(--blue);">${fmt(emi)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Completion</div><div style="font-size:16px;font-weight:700;color:var(--accent);">${tenure > 0 ? Math.round(paid/tenure*100) : 0}%</div></div>
+  `;
+}
+
+function addLoan() {
+  const type        = document.getElementById('ln-type').value;
+  const lender      = document.getElementById('ln-lender').value.trim();
+  const amount      = parseFloat(document.getElementById('ln-amount').value) || 0;
+  const outstanding = parseFloat(document.getElementById('ln-outstanding').value) || 0;
+  const emi         = parseFloat(document.getElementById('ln-emi').value) || 0;
+  const rate        = parseFloat(document.getElementById('ln-rate').value) || 0;
+  const emiDate     = document.getElementById('ln-emidate').value;
+  const start       = document.getElementById('ln-start').value;
+  const tenure      = parseInt(document.getElementById('ln-tenure').value) || 0;
+  const paid        = parseInt(document.getElementById('ln-paid').value) || 0;
+  const accno       = document.getElementById('ln-accno').value.trim();
+  const coapplicant = document.getElementById('ln-coapplicant').value.trim();
+  const note        = document.getElementById('ln-note').value.trim();
+
+  if (!lender || !amount || !emi || !tenure) { toast('Please fill Lender, Amount, EMI and Tenure.'); return; }
+
+  const loan = {
+    id: Date.now().toString(), type, lender, amount, outstanding: outstanding || amount,
+    emi, rate, emiDate, start, tenure, paid, accno, coapplicant, note,
+    addedOn: today()
+  };
+  const loans = getLoans();
+  loans.push(loan);
+  saveLoans(loans);
+
+  // Clear form
+  ['ln-lender','ln-amount','ln-outstanding','ln-emi','ln-rate','ln-emidate','ln-tenure','ln-paid','ln-accno','ln-coapplicant','ln-note'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('loan-calc-preview').style.display = 'none';
+  renderLoans();
+  toast('Loan added ✓');
+}
+
+function deleteLoan(id) {
+  if (!confirm('Remove this loan?')) return;
+  saveLoans(getLoans().filter(l => l.id !== id));
+  renderLoans(); toast('Loan removed');
+}
+
+function updateLoanPaid(id, newPaid) {
+  const loans = getLoans();
+  const loan = loans.find(l => l.id === id);
+  if (!loan) return;
+  loan.paid = parseInt(newPaid) || 0;
+  // Recalc outstanding
+  const monthlyRate = loan.rate / 12 / 100;
+  const remaining = loan.tenure - loan.paid;
+  loan.outstanding = monthlyRate > 0
+    ? loan.emi * (1 - Math.pow(1 + monthlyRate, -remaining)) / monthlyRate
+    : loan.emi * remaining;
+  loan.outstanding = Math.max(0, Math.round(loan.outstanding));
+  saveLoans(loans);
+  renderLoans();
+  toast('Loan updated ✓');
+}
+
+function getAmortSchedule(loan) {
+  const rows = [];
+  const monthlyRate = loan.rate / 12 / 100;
+  let outstanding = loan.amount;
+  const startDate = new Date(loan.start || today());
+
+  for (let i = 1; i <= loan.tenure; i++) {
+    const interest  = monthlyRate > 0 ? Math.round(outstanding * monthlyRate) : 0;
+    const principal = Math.min(loan.emi - interest, outstanding);
+    outstanding     = Math.max(0, outstanding - principal);
+    const d = new Date(startDate);
+    d.setMonth(d.getMonth() + i);
+    rows.push({
+      num: i,
+      month: d.toLocaleString('default', {month:'short', year:'numeric'}),
+      emi: loan.emi,
+      principal: Math.round(principal),
+      interest: Math.round(interest),
+      outstanding: Math.round(outstanding),
+      paid: i <= loan.paid
+    });
+  }
+  return rows;
+}
+
+function renderAmortisation() {
+  const loans = getLoans();
+  const sel = document.getElementById('amort-loan-sel');
+  const loanId = sel.value;
+  const loan = loans.find(l => l.id === loanId);
+  if (!loan) return;
+
+  const schedule = getAmortSchedule(loan);
+  const remaining = loan.tenure - loan.paid;
+  const totalEMIPaid = loan.emi * loan.paid;
+  const totalInterestPaid = schedule.filter(r=>r.paid).reduce((a,r)=>a+r.interest,0);
+  const totalPrincipalPaid = schedule.filter(r=>r.paid).reduce((a,r)=>a+r.principal,0);
+  const totalInterestPending = schedule.filter(r=>!r.paid).reduce((a,r)=>a+r.interest,0);
+  const completion = Math.round(loan.paid / loan.tenure * 100);
+
+  document.getElementById('amort-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">EMIs paid</div><div class="m-value m-income">${loan.paid} / ${loan.tenure}</div></div>
+    <div class="metric"><div class="m-label">EMIs remaining</div><div class="m-value m-expense">${remaining}</div></div>
+    <div class="metric"><div class="m-label">Outstanding</div><div class="m-value m-expense">${fmt(loan.outstanding)}</div></div>
+    <div class="metric"><div class="m-label">Total paid</div><div class="m-value m-income">${fmt(totalEMIPaid)}</div></div>
+    <div class="metric"><div class="m-label">Interest paid</div><div class="m-value" style="color:var(--amber);">${fmt(totalInterestPaid)}</div></div>
+    <div class="metric"><div class="m-label">Interest pending</div><div class="m-value" style="color:var(--amber);">${fmt(totalInterestPending)}</div></div>
+    <div class="metric"><div class="m-label">Completion</div><div class="m-value" style="color:${completion>=50?'var(--accent)':'var(--blue)'};">${completion}%</div></div>
+  `;
+
+  // Chart — outstanding trend
+  const chartData = schedule.filter((_,i) => i % Math.max(1, Math.floor(loan.tenure/12)) === 0);
+  if (loanChart2) loanChart2.destroy();
+  loanChart2 = new Chart(document.getElementById('loanChart'), {
+    type: 'line',
+    data: {
+      labels: chartData.map(r => r.month),
+      datasets: [
+        { label: 'Outstanding', data: chartData.map(r=>r.outstanding), borderColor:'#DC2626', backgroundColor:'rgba(220,38,38,0.06)', fill:true, tension:0.4, pointRadius:3 },
+        { label: 'Principal paid', data: schedule.filter((_,i)=>i%Math.max(1,Math.floor(loan.tenure/12))===0).map(r=>loan.amount-r.outstanding), borderColor:'#16A34A', backgroundColor:'rgba(22,163,74,0.06)', fill:false, tension:0.4, pointRadius:3 }
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ font:{size:11} } } },
+      scales:{ y:{ ticks:{ callback:v=>fmt(v) }, grid:{color:'rgba(0,0,0,0.05)'} }, x:{grid:{display:false}} } }
+  });
+
+  // Table
+  const tbody = document.getElementById('amort-tbody');
+  tbody.innerHTML = schedule.map(r => `
+    <tr style="${r.paid?'color:var(--text3);background:var(--bg);':''}${r.num===loan.paid+1?'background:rgba(22,163,74,0.06);font-weight:600;':''}">
+      <td>${r.num}</td>
+      <td style="white-space:nowrap;">${r.month}</td>
+      <td>${fmt(r.emi)}</td>
+      <td style="color:var(--accent);">${fmt(r.principal)}</td>
+      <td style="color:var(--amber);">${fmt(r.interest)}</td>
+      <td style="color:${r.outstanding===0?'var(--accent)':'var(--red)'};">${fmt(r.outstanding)}</td>
+      <td>${r.paid ? '<span style="color:var(--accent);font-size:11px;">✓ Paid</span>' : r.num===loan.paid+1 ? '<span style="color:var(--blue);font-size:11px;font-weight:700;">▶ Current</span>' : '<span style="color:var(--text3);font-size:11px;">Pending</span>'}</td>
+    </tr>`).join('');
+}
+
+function exportLoanStatement() {
+  const loans = getLoans();
+  const loanId = document.getElementById('amort-loan-sel').value;
+  const loan = loans.find(l => l.id === loanId);
+  if (!loan) { toast('Select a loan first.'); return; }
+  const schedule = getAmortSchedule(loan);
+  const wb = XLSX.utils.book_new();
+
+  // Info sheet
+  const infoRows = [
+    ['Loan Statement — ' + loan.type],[''],
+    ['Lender:', loan.lender],['Loan Amount:', loan.amount],
+    ['Interest Rate:', loan.rate + '%'],['EMI:', loan.emi],
+    ['Tenure:', loan.tenure + ' months'],['EMIs Paid:', loan.paid],
+    ['Outstanding:', loan.outstanding],['Start Date:', loan.start],
+    ['EMI Date:', loan.emiDate ? loan.emiDate + 'th of every month' : '—'],
+    ['Account No:', loan.accno||'—'],['Co-applicant:', loan.coapplicant||'—'],
+    [''],['Generated:', today()],[''],['© 2026 Felevare Global Ventures LLP']
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), 'Loan Info');
+
+  // Schedule sheet
+  const rows = [['#','Month','EMI','Principal','Interest','Outstanding','Status']];
+  schedule.forEach(r => rows.push([r.num, r.month, r.emi, r.principal, r.interest, r.outstanding, r.paid?'Paid':r.num===loan.paid+1?'Current':'Pending']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [5,14,12,12,12,14,10].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Amortisation');
+  XLSX.writeFile(wb, `${loan.lender}_${loan.type}_Schedule.xlsx`);
+  toast('Loan statement exported ✓');
+}
+
+function exportLoanCSV() {
+  const loans = getLoans();
+  const loanId = document.getElementById('amort-loan-sel').value;
+  const loan = loans.find(l => l.id === loanId);
+  if (!loan) { toast('Select a loan first.'); return; }
+  const schedule = getAmortSchedule(loan);
+  const rows = [['#','Month','EMI','Principal','Interest','Outstanding','Status']];
+  schedule.forEach(r => rows.push([r.num,r.month,r.emi,r.principal,r.interest,r.outstanding,r.paid?'Paid':r.num===loan.paid+1?'Current':'Pending']));
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download = `${loan.lender}_${loan.type}_Schedule.csv`;
+  a.click();
+  toast('CSV exported ✓');
+}
+
+function renderLoans() {
+  const loans = getLoans();
+  const today_str = today();
+
+  // Summary metrics
+  const totalLoanAmt  = loans.reduce((a,l)=>a+l.amount,0);
+  const totalOutstanding = loans.reduce((a,l)=>a+l.outstanding,0);
+  const totalEMI      = loans.reduce((a,l)=>a+l.emi,0);
+  const totalRemaining = loans.reduce((a,l)=>a+(l.tenure-l.paid),0);
+
+  document.getElementById('loan-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">Total loans</div><div class="m-value" style="color:var(--blue);">${loans.length}</div></div>
+    <div class="metric"><div class="m-label">Total loan amount</div><div class="m-value">${fmt(totalLoanAmt)}</div></div>
+    <div class="metric"><div class="m-label">Total outstanding</div><div class="m-value m-expense">${fmt(totalOutstanding)}</div></div>
+    <div class="metric"><div class="m-label">Monthly EMI burden</div><div class="m-value m-expense">${fmt(totalEMI)}</div></div>
+    <div class="metric"><div class="m-label">Total EMIs remaining</div><div class="m-value" style="color:var(--amber);">${totalRemaining}</div></div>
+  `;
+
+  // Alerts — EMI due this month
+  const curDay = new Date().getDate();
+  const alerts = loans.filter(l => l.emiDate && parseInt(l.emiDate) >= curDay && parseInt(l.emiDate) <= curDay+5 && l.paid < l.tenure);
+  let alertHtml = '';
+  alerts.forEach(l => alertHtml += `<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${l.type} (${l.lender}) — EMI of ${fmt(l.emi)} due on ${l.emiDate}${getOrdinal(parseInt(l.emiDate))} this month</div>`);
+  document.getElementById('loan-alerts').innerHTML = alertHtml;
+
+  // Amortisation selector
+  if (loans.length) {
+    document.getElementById('loan-amort-card').style.display = 'block';
+    const sel = document.getElementById('amort-loan-sel');
+    const prev = sel.value;
+    sel.innerHTML = loans.map(l=>`<option value="${l.id}" ${l.id===prev?'selected':''}>${l.type} — ${l.lender}</option>`).join('');
+    renderAmortisation();
+  } else {
+    document.getElementById('loan-amort-card').style.display = 'none';
+  }
+
+  // Loan cards
+  document.getElementById('loan-list').innerHTML = loans.length ? loans.map(loan => {
+    const remaining = loan.tenure - loan.paid;
+    const completion = Math.round(loan.paid / loan.tenure * 100);
+    const barCol = completion >= 75 ? 'var(--accent)' : completion >= 40 ? 'var(--blue)' : 'var(--amber)';
+    const endDate = (() => { const d = new Date(loan.start||today()); d.setMonth(d.getMonth()+loan.tenure); return d.toLocaleString('default',{month:'short',year:'numeric'}); })();
+    return `<div class="card" style="margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div style="width:44px;height:44px;background:var(--blue-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+          ${ loan.type.includes('Home')?'🏠':loan.type.includes('Car')?'🚗':loan.type.includes('Education')?'🎓':loan.type.includes('Personal')?'💰':loan.type.includes('Gold')?'🥇':'🏦' }
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:15px;">${loan.type}</div>
+          <div style="font-size:12px;color:var(--text2);">${loan.lender}${loan.accno?' · A/c: '+loan.accno:''}${loan.coapplicant?' · Co: '+loan.coapplicant:''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:18px;font-weight:700;color:var(--red);">${fmt(loan.outstanding)}</div>
+          <div style="font-size:11px;color:var(--text3);">outstanding</div>
+        </div>
+        <button class="btn red sm" onclick="deleteLoan('${loan.id}')">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:10px;">
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Monthly EMI</div>
+          <div style="font-size:14px;font-weight:700;color:var(--blue);">${fmt(loan.emi)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Interest rate</div>
+          <div style="font-size:14px;font-weight:700;">${loan.rate}% p.a.</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">EMIs paid</div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent);">${loan.paid} / ${loan.tenure}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">EMIs remaining</div>
+          <div style="font-size:14px;font-weight:700;color:var(--red);">${remaining}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Loan amount</div>
+          <div style="font-size:14px;font-weight:700;">${fmt(loan.amount)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--text3);">Ends by</div>
+          <div style="font-size:14px;font-weight:700;">${endDate}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:11px;color:var(--text3);">Repayment progress</span>
+            <span style="font-size:11px;font-weight:600;color:${barCol};">${completion}% complete</span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${completion}%;background:${barCol};border-radius:4px;transition:width 0.5s;"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:var(--text3);">EMIs paid:</label>
+          <input type="number" value="${loan.paid}" min="0" max="${loan.tenure}" style="width:60px;padding:4px 6px;border:1px solid var(--border2);border-radius:4px;font-size:12px;" onchange="updateLoanPaid('${loan.id}',this.value)">
+        </div>
+      </div>
+      ${loan.note?`<div style="font-size:12px;color:var(--text3);margin-top:8px;">📝 ${loan.note}</div>`:''}
+    </div>`;
+  }).join('') : '<div class="empty"><div class="ei">🏠</div>No loans added yet</div>';
+}
+
+function getOrdinal(n) {
+  const s = ['th','st','nd','rd'];
+  const v = n%100;
+  return s[(v-20)%10]||s[v]||s[0];
 }
 
 // Keyboard: Enter to login
