@@ -718,29 +718,80 @@
 
     <!-- BANK BALANCES -->
     <div id="page-banks" class="section">
-      <div class="page-header"><h2>Bank Balances</h2><p>Track your bank account balances manually</p></div>
+      <div class="page-header"><h2>Bank Balances</h2><p>Full ledger — auto-syncs with UPI/Debit Card transactions</p></div>
       <div class="content">
         <div class="metrics" id="bank-metrics"></div>
+
+        <!-- ACCOUNT CARDS -->
+        <div id="bank-list" style="margin-bottom:1rem;"></div>
+
+        <!-- ADD BANK -->
         <div class="card">
-          <div class="card-title">Your bank accounts</div>
-          <div id="bank-list"></div>
-          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
-            <div class="card-title">Add / update bank</div>
+          <div class="card-title">➕ Add bank account</div>
+          <div class="form-row c4">
+            <div class="fl"><label>Bank name</label><input type="text" id="b-name" placeholder="e.g. HDFC Bank"></div>
+            <div class="fl"><label>Account type</label>
+              <select id="b-type">
+                <option>Savings</option><option>Current</option><option>Salary</option><option>NRI</option><option>Fixed Deposit</option>
+              </select>
+            </div>
+            <div class="fl"><label>Opening balance (₹)</label><input type="number" id="b-bal" placeholder="0" min="0"></div>
+            <div class="fl"><label>As on date</label><input type="date" id="b-date"></div>
+          </div>
+          <div class="form-row c2">
+            <div class="fl"><label>Account number (last 4 digits)</label><input type="text" id="b-accno" placeholder="XXXX" maxlength="4"></div>
+            <div class="fl"><label>IFSC (optional)</label><input type="text" id="b-ifsc" placeholder="HDFC0001234" style="text-transform:uppercase;"></div>
+          </div>
+          <button class="btn green sm" onclick="addBank()">+ Add bank account</button>
+        </div>
+
+        <!-- LEDGER -->
+        <div class="card" id="bank-ledger-card" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap;">
+            <div class="card-title" style="margin:0;">📒 Account Ledger</div>
+            <select id="bl-bank" onchange="renderBankLedger()" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+            <input type="month" id="bl-month" onchange="renderBankLedger()" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;">
+            <button class="btn sm green" onclick="addBankEntry()">+ Add entry</button>
+            <button class="btn sm blue" onclick="exportBankStatement()">📊 Export</button>
+          </div>
+          <!-- ADD ENTRY FORM -->
+          <div id="bank-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
             <div class="form-row c4">
-              <div class="fl"><label>Bank name</label><input type="text" id="b-name" placeholder="e.g. HDFC Bank"></div>
-              <div class="fl"><label>Account type</label>
-                <select id="b-type">
-                  <option>Savings</option><option>Current</option><option>Salary</option><option>NRI</option><option>Fixed Deposit</option>
+              <div class="fl"><label>Date</label><input type="date" id="be-date"></div>
+              <div class="fl"><label>Type</label>
+                <select id="be-type" onchange="document.getElementById('be-amt').style.color=this.value==='Credit'?'var(--accent)':'var(--red)'">
+                  <option value="Credit">Credit (Money IN)</option>
+                  <option value="Debit">Debit (Money OUT)</option>
                 </select>
               </div>
-              <div class="fl"><label>Balance (₹)</label><input type="number" id="b-bal" placeholder="0" min="0"></div>
-              <div class="fl"><label>As on date</label><input type="date" id="b-date"></div>
+              <div class="fl"><label>Amount (₹)</label><input type="number" id="be-amt" placeholder="0" min="0"></div>
+              <div class="fl"><label>Mode</label>
+                <select id="be-mode">
+                  <option>UPI</option><option>Debit Card</option><option>NEFT</option><option>RTGS</option><option>IMPS</option><option>Cheque</option><option>Cash</option><option>Bank Charges</option><option>Interest</option><option>Others</option>
+                </select>
+              </div>
             </div>
-            <button class="btn green sm" onclick="addBank()">+ Add bank account</button>
+            <div class="form-row c2">
+              <div class="fl"><label>Description</label><input type="text" id="be-desc" placeholder="e.g. Grocery purchase, Salary credit"></div>
+              <div class="fl"><label>Reference / UTR</label><input type="text" id="be-ref" placeholder="Optional reference number"></div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn green sm" onclick="saveBankEntry()">✓ Save entry</button>
+              <button class="btn sm" onclick="document.getElementById('bank-entry-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+          <!-- LEDGER TABLE -->
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Description</th><th>Mode</th><th>Reference</th><th style="color:var(--accent);">Credit (+)</th><th style="color:var(--red);">Debit (−)</th><th>Balance</th><th></th></tr></thead>
+              <tbody id="bank-ledger-tbody"></tbody>
+            </table>
           </div>
         </div>
+
+        <!-- BALANCE CHART -->
         <div class="card">
-          <div class="card-title">Balance history</div>
+          <div class="card-title">Balance overview</div>
           <div class="chart-box" style="height:200px;"><canvas id="bankChart" role="img" aria-label="Bank balance chart"></canvas></div>
         </div>
       </div>
@@ -748,27 +799,75 @@
 
     <!-- CREDIT CARD REMINDERS -->
     <div id="page-cards" class="section">
-      <div class="page-header"><h2>Credit Card Reminders</h2><p>Track due dates and outstanding amounts</p></div>
+      <div class="page-header"><h2>Credit Cards</h2><p>Full statement — track spending, due dates and payments</p></div>
       <div class="content">
         <div class="metrics" id="card-metrics"></div>
         <div id="card-due-alert" style="margin-bottom:1rem;"></div>
+
+        <!-- CARD LIST -->
+        <div id="card-list" style="margin-bottom:1rem;"></div>
+
+        <!-- ADD CARD -->
         <div class="card">
-          <div class="card-title">Your credit cards</div>
-          <div id="card-list"></div>
-          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
-            <div class="card-title">Add / update card</div>
+          <div class="card-title">➕ Add credit card</div>
+          <div class="form-row c4">
+            <div class="fl"><label>Card name</label><input type="text" id="cc-name" placeholder="e.g. HDFC Regalia"></div>
+            <div class="fl"><label>Bank</label><input type="text" id="cc-bank" placeholder="e.g. HDFC"></div>
+            <div class="fl"><label>Credit limit (₹)</label><input type="number" id="cc-limit" placeholder="0" min="0"></div>
+            <div class="fl"><label>Outstanding (₹)</label><input type="number" id="cc-due" placeholder="0" min="0"></div>
+          </div>
+          <div class="form-row c4">
+            <div class="fl"><label>Due date</label><input type="date" id="cc-date"></div>
+            <div class="fl"><label>Statement date (day)</label><input type="number" id="cc-stmt" placeholder="e.g. 15" min="1" max="31"></div>
+            <div class="fl"><label>Min. payment (₹)</label><input type="number" id="cc-min" placeholder="0" min="0"></div>
+            <div class="fl"><label>Last 4 digits</label><input type="text" id="cc-last4" placeholder="XXXX" maxlength="4"></div>
+          </div>
+          <button class="btn green sm" onclick="addCard()">+ Add credit card</button>
+        </div>
+
+        <!-- CARD STATEMENT -->
+        <div class="card" id="card-stmt-card" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap;">
+            <div class="card-title" style="margin:0;">📄 Card Statement</div>
+            <select id="cs-card" onchange="renderCardStatement()" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
+            <input type="month" id="cs-month" onchange="renderCardStatement()" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;">
+            <button class="btn sm green" onclick="addCardEntry()">+ Add entry</button>
+            <button class="btn sm blue" onclick="exportCardStatement()">📊 Export</button>
+          </div>
+          <!-- ADD CARD ENTRY FORM -->
+          <div id="card-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
             <div class="form-row c4">
-              <div class="fl"><label>Card name</label><input type="text" id="cc-name" placeholder="e.g. HDFC Regalia"></div>
-              <div class="fl"><label>Bank</label><input type="text" id="cc-bank" placeholder="e.g. HDFC"></div>
-              <div class="fl"><label>Outstanding (₹)</label><input type="number" id="cc-due" placeholder="0" min="0"></div>
-              <div class="fl"><label>Due date</label><input type="date" id="cc-date"></div>
+              <div class="fl"><label>Date</label><input type="date" id="ce-date"></div>
+              <div class="fl"><label>Type</label>
+                <select id="ce-type">
+                  <option value="Debit">Debit (Purchase/Spend)</option>
+                  <option value="Credit">Credit (Payment/Refund)</option>
+                </select>
+              </div>
+              <div class="fl"><label>Amount (₹)</label><input type="number" id="ce-amt" placeholder="0" min="0"></div>
+              <div class="fl"><label>Category</label>
+                <select id="ce-cat">
+                  <option>Shopping</option><option>Food & Dining</option><option>Travel</option><option>Fuel</option>
+                  <option>Entertainment</option><option>Medical</option><option>Groceries</option>
+                  <option>Payment</option><option>Bank Charges</option><option>EMI</option><option>Others</option>
+                </select>
+              </div>
             </div>
-            <div class="form-row c3">
-              <div class="fl"><label>Credit limit (₹)</label><input type="number" id="cc-limit" placeholder="0" min="0"></div>
-              <div class="fl"><label>Statement date</label><input type="number" id="cc-stmt" placeholder="e.g. 15" min="1" max="31"></div>
-              <div class="fl"><label>Min. payment (₹)</label><input type="number" id="cc-min" placeholder="0" min="0"></div>
+            <div class="form-row c2">
+              <div class="fl"><label>Description</label><input type="text" id="ce-desc" placeholder="e.g. Amazon purchase, Payment received"></div>
+              <div class="fl"><label>Reference</label><input type="text" id="ce-ref" placeholder="Optional transaction ref"></div>
             </div>
-            <button class="btn green sm" onclick="addCard()">+ Add credit card</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn green sm" onclick="saveCardEntry()">✓ Save entry</button>
+              <button class="btn sm" onclick="document.getElementById('card-entry-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+          <!-- STATEMENT TABLE -->
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Reference</th><th style="color:var(--accent);">Credit (+)</th><th style="color:var(--red);">Debit (−)</th><th>Balance</th><th></th></tr></thead>
+              <tbody id="card-stmt-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1232,8 +1331,16 @@ function showPage(id) {
     renderUsers();
   }
   if (id === 'categories') renderCategories();
-  if (id === 'banks') { document.getElementById('b-date').value = today(); renderBanks(); }
-  if (id === 'cards') { document.getElementById('cc-date').value = today(); renderCards(); }
+  if (id === 'banks') {
+    document.getElementById('b-date').value = today();
+    document.getElementById('bl-month').value = thisMonth();
+    renderBanks();
+  }
+  if (id === 'cards') {
+    document.getElementById('cc-date').value = today();
+    document.getElementById('cs-month').value = thisMonth();
+    renderCards();
+  }
 }
 
 // ===================== CATEGORIES =====================
@@ -2472,152 +2579,449 @@ function installPWA() {
 // ===================== BANK BALANCE TRACKER =====================
 let bankChart2;
 function getBanks() { return JSON.parse(localStorage.getItem('fintrack_banks') || '[]'); }
-function saveBanks(banks) { localStorage.setItem('fintrack_banks', JSON.stringify(banks)); }
+function saveBanks(b) { localStorage.setItem('fintrack_banks', JSON.stringify(b)); }
+function getBankEntries() { return JSON.parse(localStorage.getItem('fintrack_bank_entries') || '[]'); }
+function saveBankEntries(e) { localStorage.setItem('fintrack_bank_entries', JSON.stringify(e)); }
 
 function addBank() {
-  const name = document.getElementById('b-name').value.trim();
-  const type = document.getElementById('b-type').value;
-  const bal  = parseFloat(document.getElementById('b-bal').value) || 0;
-  const date = document.getElementById('b-date').value || today();
+  const name  = document.getElementById('b-name').value.trim();
+  const type  = document.getElementById('b-type').value;
+  const bal   = parseFloat(document.getElementById('b-bal').value) || 0;
+  const date  = document.getElementById('b-date').value || today();
+  const accno = document.getElementById('b-accno').value.trim();
+  const ifsc  = document.getElementById('b-ifsc').value.trim().toUpperCase();
   if (!name) { toast('Enter bank name.'); return; }
   const banks = getBanks();
-  const existing = banks.findIndex(b => b.name.toLowerCase() === name.toLowerCase());
-  const entry = { id: existing >= 0 ? banks[existing].id : Date.now().toString(), name, type, balance: bal, date, history: [] };
-  if (existing >= 0) {
-    entry.history = [...(banks[existing].history || []), { balance: banks[existing].balance, date: banks[existing].date }];
-    banks[existing] = entry;
-  } else {
-    banks.push(entry);
-  }
-  saveBanks(banks);
+  if (banks.find(b => b.name.toLowerCase() === name.toLowerCase())) { toast('Bank already exists. Use ledger to add entries.'); return; }
+  const bank = { id: Date.now().toString(), name, type, openingBalance: bal, date, accno, ifsc };
+  banks.push(bank);
+  // Add opening balance as first ledger entry
+  const entries = getBankEntries();
+  entries.push({ id: Date.now().toString()+'_ob', bankId: bank.id, date, type: 'Credit', amount: bal, mode: 'Opening Balance', desc: 'Opening Balance', ref: '' });
+  saveBanks(banks); saveBankEntries(entries);
   document.getElementById('b-name').value = '';
   document.getElementById('b-bal').value = '';
+  document.getElementById('b-accno').value = '';
+  document.getElementById('b-ifsc').value = '';
   renderBanks();
-  toast('Bank account saved ✓');
+  toast('Bank account added ✓');
 }
 
 function deleteBank(id) {
-  if (!confirm('Remove this bank account?')) return;
+  if (!confirm('Remove this bank account and all its entries?')) return;
   saveBanks(getBanks().filter(b => b.id !== id));
-  renderBanks();
-  toast('Removed');
+  saveBankEntries(getBankEntries().filter(e => e.bankId !== id));
+  renderBanks(); toast('Removed');
+}
+
+function getBankBalance(bankId) {
+  const entries = getBankEntries().filter(e => e.bankId === bankId);
+  return entries.reduce((sum, e) => sum + (e.type === 'Credit' ? e.amount : -e.amount), 0);
+}
+
+function addBankEntry() {
+  document.getElementById('bank-entry-form').style.display = 'block';
+  document.getElementById('be-date').value = today();
+}
+
+function saveBankEntry() {
+  const bankId = document.getElementById('bl-bank').value;
+  const date   = document.getElementById('be-date').value || today();
+  const type   = document.getElementById('be-type').value;
+  const amt    = parseFloat(document.getElementById('be-amt').value) || 0;
+  const mode   = document.getElementById('be-mode').value;
+  const desc   = document.getElementById('be-desc').value.trim();
+  const ref    = document.getElementById('be-ref').value.trim();
+  if (!amt || amt <= 0) { toast('Enter a valid amount.'); return; }
+  const entries = getBankEntries();
+  entries.push({ id: Date.now().toString(), bankId, date, type, amount: amt, mode, desc: desc || mode, ref });
+  saveBankEntries(entries);
+  document.getElementById('be-amt').value = '';
+  document.getElementById('be-desc').value = '';
+  document.getElementById('be-ref').value = '';
+  document.getElementById('bank-entry-form').style.display = 'none';
+  renderBankLedger(); renderBanks();
+  toast(`${type} entry saved ✓`);
+}
+
+function deleteBankEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  saveBankEntries(getBankEntries().filter(e => e.id !== id));
+  renderBankLedger(); renderBanks();
+  toast('Entry deleted');
+}
+
+function renderBankLedger() {
+  const banks = getBanks();
+  const blSel = document.getElementById('bl-bank');
+  const prevBank = blSel.value;
+  blSel.innerHTML = banks.map(b => `<option value="${b.id}" ${b.id===prevBank?'selected':''}>${b.name}</option>`).join('');
+  const bankId = blSel.value;
+  const month = document.getElementById('bl-month').value;
+  if (!bankId) return;
+
+  let entries = getBankEntries().filter(e => e.bankId === bankId);
+  if (month) entries = entries.filter(e => e.date.startsWith(month));
+  entries = entries.sort((a,b) => a.date.localeCompare(b.date));
+
+  // Running balance
+  const allEntries = getBankEntries().filter(e => e.bankId === bankId).sort((a,b) => a.date.localeCompare(b.date));
+  let runBal = 0;
+  const balMap = {};
+  allEntries.forEach(e => { runBal += e.type==='Credit'?e.amount:-e.amount; balMap[e.id] = runBal; });
+
+  const totalCredit = entries.filter(e=>e.type==='Credit').reduce((a,e)=>a+e.amount,0);
+  const totalDebit  = entries.filter(e=>e.type==='Debit').reduce((a,e)=>a+e.amount,0);
+  const closingBal  = getBankBalance(bankId);
+
+  // Summary row
+  const tbody = document.getElementById('bank-ledger-tbody');
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">📒</div>No entries for this period</div></td></tr>';
+  } else {
+    tbody.innerHTML = entries.map(e => `
+      <tr>
+        <td style="white-space:nowrap;">${e.date}</td>
+        <td>${e.desc||e.mode}</td>
+        <td style="color:var(--text2);">${e.mode}</td>
+        <td style="color:var(--text3);font-size:12px;">${e.ref||'—'}</td>
+        <td class="amt-pos">${e.type==='Credit'?fmt(e.amount):'—'}</td>
+        <td class="amt-neg">${e.type==='Debit'?fmt(e.amount):'—'}</td>
+        <td style="font-weight:600;">${fmt(balMap[e.id]||0)}</td>
+        <td><button class="btn red sm" onclick="deleteBankEntry('${e.id}')">✕</button></td>
+      </tr>`).join('') +
+      `<tr style="background:var(--bg);font-weight:700;">
+        <td colspan="4" style="padding:10px 12px;">Total</td>
+        <td class="amt-pos">${fmt(totalCredit)}</td>
+        <td class="amt-neg">${fmt(totalDebit)}</td>
+        <td>${fmt(closingBal)}</td>
+        <td></td>
+      </tr>`;
+  }
+}
+
+function exportBankStatement() {
+  const banks = getBanks();
+  const bankId = document.getElementById('bl-bank').value;
+  const bank = banks.find(b => b.id === bankId);
+  if (!bank) { toast('Select a bank first.'); return; }
+  const month = document.getElementById('bl-month').value;
+  let entries = getBankEntries().filter(e => e.bankId === bankId);
+  if (month) entries = entries.filter(e => e.date.startsWith(month));
+  entries = entries.sort((a,b) => a.date.localeCompare(b.date));
+
+  let runBal = 0;
+  const rows = [['Date','Description','Mode','Reference','Credit (+)','Debit (-)','Balance']];
+  entries.forEach(e => {
+    runBal += e.type==='Credit'?e.amount:-e.amount;
+    rows.push([e.date, e.desc||e.mode, e.mode, e.ref||'', e.type==='Credit'?e.amount:'', e.type==='Debit'?e.amount:'', runBal.toFixed(2)]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  // Info sheet
+  const infoRows = [['Bank Statement'],['Bank:', bank.name],['Account Type:', bank.type],['Account No:', bank.accno?'XXXX'+bank.accno:'—'],['Period:', month||'All'],['Generated:', today()],[''],['© 2026 Felevare Global Ventures LLP']];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), 'Info');
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [12,30,14,18,12,12,14].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Statement');
+  XLSX.writeFile(wb, `${bank.name}_Statement_${month||'All'}.xlsx`);
+  toast('Bank statement exported ✓');
 }
 
 function renderBanks() {
   const banks = getBanks();
-  const total = banks.reduce((a, b) => a + b.balance, 0);
+  const total = banks.reduce((a,b) => a + getBankBalance(b.id), 0);
   document.getElementById('bank-metrics').innerHTML = `
     <div class="metric"><div class="m-label">Total balance</div><div class="m-value m-income">${fmt(total)}</div></div>
     <div class="metric"><div class="m-label">Accounts</div><div class="m-value" style="color:var(--blue);">${banks.length}</div></div>
   `;
-  document.getElementById('bank-list').innerHTML = banks.length ? banks.map(b => `
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
-      <div style="width:40px;height:40px;background:var(--blue-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🏦</div>
-      <div style="flex:1;">
-        <div style="font-weight:600;font-size:14px;">${b.name}</div>
-        <div style="font-size:12px;color:var(--text2);">${b.type} · Updated ${b.date}</div>
-      </div>
-      <div style="font-size:18px;font-weight:700;color:var(--accent);">${fmt(b.balance)}</div>
-      <button class="btn red sm" onclick="deleteBank('${b.id}')">✕</button>
-    </div>`).join('') : '<div class="empty"><div class="ei">🏦</div>No bank accounts added yet</div>';
 
-  // Bank balance chart
+  if (banks.length) {
+    document.getElementById('bank-ledger-card').style.display = 'block';
+    const blSel = document.getElementById('bl-bank');
+    const prev = blSel.value;
+    blSel.innerHTML = banks.map(b => `<option value="${b.id}" ${b.id===prev?'selected':''}>${b.name}</option>`).join('');
+    renderBankLedger();
+  } else {
+    document.getElementById('bank-ledger-card').style.display = 'none';
+  }
+
+  document.getElementById('bank-list').innerHTML = banks.length ? banks.map(b => {
+    const bal = getBankBalance(b.id);
+    const entries = getBankEntries().filter(e => e.bankId === b.id);
+    const todayEntries = entries.filter(e => e.date === today());
+    return `<div class="card" style="margin-bottom:0.75rem;padding:1rem;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:44px;height:44px;background:var(--blue-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🏦</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:15px;">${b.name} ${b.accno?'(••••'+b.accno+')':''}</div>
+          <div style="font-size:12px;color:var(--text2);">${b.type}${b.ifsc?' · '+b.ifsc:''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:20px;font-weight:700;color:${bal>=0?'var(--accent)':'var(--red)'};">${fmt(bal)}</div>
+          <div style="font-size:11px;color:var(--text3);">${entries.length} entries${todayEntries.length?' · '+todayEntries.length+' today':''}</div>
+        </div>
+        <button class="btn red sm" onclick="deleteBank('${b.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty"><div class="ei">🏦</div>No bank accounts yet. Add one below.</div>';
+
+  // Chart
   if (bankChart2) bankChart2.destroy();
   if (banks.length) {
     bankChart2 = new Chart(document.getElementById('bankChart'), {
       type: 'bar',
-      data: {
-        labels: banks.map(b => b.name),
-        datasets: [{ data: banks.map(b => b.balance), backgroundColor: '#2563EB', borderRadius: 6 }]
-      },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { ticks: { callback: v => fmt(v) } } } }
+      data: { labels: banks.map(b=>b.name), datasets: [{ data: banks.map(b=>getBankBalance(b.id)), backgroundColor:'#2563EB', borderRadius:6 }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{ticks:{callback:v=>fmt(v)}}} }
     });
+  }
+
+  // Auto-sync: transactions paid via UPI/Debit Card
+  syncTransactionsToBanks();
+}
+
+function syncTransactionsToBanks() {
+  // For each bank, check recent FinTrack transactions paid via UPI or Debit Card
+  // and show a sync indicator (doesn't auto-add — user confirms)
+  const banks = getBanks();
+  if (!banks.length) return;
+  const bankEntryIds = new Set(getBankEntries().map(e => e.ref));
+  const unsynced = DB.transactions.filter(t =>
+    (t.mode === 'UPI' || t.mode === 'Debit Card') &&
+    t.type === 'Expenses' &&
+    !bankEntryIds.has('TXN_' + t.id)
+  );
+  if (unsynced.length > 0) {
+    const existing = document.getElementById('bank-sync-alert');
+    const el = existing || document.createElement('div');
+    el.id = 'bank-sync-alert';
+    el.style.cssText = 'background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:1rem;font-size:13px;font-weight:500;';
+    el.innerHTML = `🔄 ${unsynced.length} UPI/Debit Card transaction(s) not yet recorded in bank ledger. <button class="btn sm" style="margin-left:8px;" onclick="autoSyncTxnsToBanks()">Auto-add to ledger</button>`;
+    if (!existing) document.getElementById('bank-list').before(el);
   }
 }
 
-// ===================== CREDIT CARD REMINDERS =====================
+function autoSyncTxnsToBanks() {
+  const banks = getBanks();
+  if (!banks.length) { toast('Add a bank account first.'); return; }
+  if (banks.length > 1) { toast('Multiple banks found. Please add UPI/Debit entries manually to the correct bank.'); return; }
+  const bankId = banks[0].id;
+  const bankEntryRefs = new Set(getBankEntries().map(e => e.ref));
+  const unsynced = DB.transactions.filter(t =>
+    (t.mode === 'UPI' || t.mode === 'Debit Card') &&
+    t.type === 'Expenses' &&
+    !bankEntryRefs.has('TXN_' + t.id)
+  );
+  const entries = getBankEntries();
+  unsynced.forEach(t => {
+    entries.push({ id: Date.now().toString() + Math.random(), bankId, date: t.date, type: 'Debit', amount: t.amount, mode: t.mode, desc: t.cat + (t.sub?' - '+t.sub:'') + (t.note?' ('+t.note+')':''), ref: 'TXN_' + t.id });
+  });
+  saveBankEntries(entries);
+  document.getElementById('bank-sync-alert')?.remove();
+  renderBanks(); renderBankLedger();
+  toast(`✓ ${unsynced.length} transactions synced to ${banks[0].name}`);
+}
+
+// ===================== CREDIT CARD FULL LEDGER =====================
 function getCards() { return JSON.parse(localStorage.getItem('fintrack_cards') || '[]'); }
-function saveCards(cards) { localStorage.setItem('fintrack_cards', JSON.stringify(cards)); }
+function saveCards(c) { localStorage.setItem('fintrack_cards', JSON.stringify(c)); }
+function getCardEntries() { return JSON.parse(localStorage.getItem('fintrack_card_entries') || '[]'); }
+function saveCardEntries(e) { localStorage.setItem('fintrack_card_entries', JSON.stringify(e)); }
 
 function addCard() {
   const name  = document.getElementById('cc-name').value.trim();
   const bank  = document.getElementById('cc-bank').value.trim();
+  const limit = parseFloat(document.getElementById('cc-limit').value) || 0;
   const due   = parseFloat(document.getElementById('cc-due').value) || 0;
   const date  = document.getElementById('cc-date').value;
-  const limit = parseFloat(document.getElementById('cc-limit').value) || 0;
   const stmt  = document.getElementById('cc-stmt').value;
   const min   = parseFloat(document.getElementById('cc-min').value) || 0;
+  const last4 = document.getElementById('cc-last4').value.trim();
   if (!name || !date) { toast('Enter card name and due date.'); return; }
   const cards = getCards();
-  const existing = cards.findIndex(c => c.name.toLowerCase() === name.toLowerCase());
-  const entry = { id: existing >= 0 ? cards[existing].id : Date.now().toString(), name, bank, outstanding: due, dueDate: date, limit, stmtDate: stmt, minPayment: min };
-  if (existing >= 0) cards[existing] = entry; else cards.push(entry);
-  saveCards(cards);
-  document.getElementById('cc-name').value = '';
-  document.getElementById('cc-due').value = '';
-  document.getElementById('cc-limit').value = '';
-  document.getElementById('cc-min').value = '';
-  renderCards();
-  toast('Card saved ✓');
+  if (cards.find(c => c.name.toLowerCase() === name.toLowerCase())) { toast('Card already exists.'); return; }
+  const card = { id: Date.now().toString(), name, bank, limit, dueDate: date, stmtDate: stmt, minPayment: min, last4 };
+  cards.push(card);
+  // Add opening outstanding as first entry if any
+  const entries = getCardEntries();
+  if (due > 0) entries.push({ id: Date.now().toString()+'_ob', cardId: card.id, date: today(), type: 'Debit', amount: due, cat: 'Opening Balance', desc: 'Opening Outstanding Balance', ref: '' });
+  saveCards(cards); saveCardEntries(entries);
+  document.getElementById('cc-name').value=''; document.getElementById('cc-bank').value='';
+  document.getElementById('cc-limit').value=''; document.getElementById('cc-due').value='';
+  document.getElementById('cc-min').value=''; document.getElementById('cc-last4').value='';
+  renderCards(); toast('Card added ✓');
 }
 
 function deleteCard(id) {
-  if (!confirm('Remove this card?')) return;
-  saveCards(getCards().filter(c => c.id !== id));
-  renderCards();
+  if (!confirm('Remove this card and all its entries?')) return;
+  saveCards(getCards().filter(c=>c.id!==id));
+  saveCardEntries(getCardEntries().filter(e=>e.cardId!==id));
+  renderCards(); toast('Removed');
+}
+
+function getCardBalance(cardId) {
+  return getCardEntries().filter(e=>e.cardId===cardId)
+    .reduce((sum,e) => sum + (e.type==='Debit'?e.amount:-e.amount), 0);
+}
+
+function addCardEntry() {
+  document.getElementById('card-entry-form').style.display = 'block';
+  document.getElementById('ce-date').value = today();
+}
+
+function saveCardEntry() {
+  const cardId = document.getElementById('cs-card').value;
+  const date  = document.getElementById('ce-date').value || today();
+  const type  = document.getElementById('ce-type').value;
+  const amt   = parseFloat(document.getElementById('ce-amt').value) || 0;
+  const cat   = document.getElementById('ce-cat').value;
+  const desc  = document.getElementById('ce-desc').value.trim();
+  const ref   = document.getElementById('ce-ref').value.trim();
+  if (!amt || amt <= 0) { toast('Enter a valid amount.'); return; }
+  const entries = getCardEntries();
+  entries.push({ id: Date.now().toString(), cardId, date, type, amount: amt, cat, desc: desc||cat, ref });
+  saveCardEntries(entries);
+  document.getElementById('ce-amt').value=''; document.getElementById('ce-desc').value=''; document.getElementById('ce-ref').value='';
+  document.getElementById('card-entry-form').style.display = 'none';
+  renderCardStatement(); renderCards(); toast(`${type} entry saved ✓`);
+}
+
+function deleteCardEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  saveCardEntries(getCardEntries().filter(e=>e.id!==id));
+  renderCardStatement(); renderCards(); toast('Deleted');
+}
+
+function renderCardStatement() {
+  const cards = getCards();
+  const csSel = document.getElementById('cs-card');
+  const prev = csSel.value;
+  csSel.innerHTML = cards.map(c=>`<option value="${c.id}" ${c.id===prev?'selected':''}>${c.name}${c.last4?' (••••'+c.last4+')':''}</option>`).join('');
+  const cardId = csSel.value;
+  const month = document.getElementById('cs-month').value;
+  if (!cardId) return;
+  let entries = getCardEntries().filter(e=>e.cardId===cardId);
+  if (month) entries = entries.filter(e=>e.date.startsWith(month));
+  entries = entries.sort((a,b)=>a.date.localeCompare(b.date));
+
+  // Running balance
+  const allEntries = getCardEntries().filter(e=>e.cardId===cardId).sort((a,b)=>a.date.localeCompare(b.date));
+  let runBal = 0;
+  const balMap = {};
+  allEntries.forEach(e => { runBal += e.type==='Debit'?e.amount:-e.amount; balMap[e.id]=runBal; });
+
+  const totalDebit  = entries.filter(e=>e.type==='Debit').reduce((a,e)=>a+e.amount,0);
+  const totalCredit = entries.filter(e=>e.type==='Credit').reduce((a,e)=>a+e.amount,0);
+  const outstanding = getCardBalance(cardId);
+
+  const tbody = document.getElementById('card-stmt-tbody');
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="ei">💳</div>No entries for this period</div></td></tr>';
+  } else {
+    tbody.innerHTML = entries.map(e=>`
+      <tr>
+        <td style="white-space:nowrap;">${e.date}</td>
+        <td>${e.desc||e.cat}</td>
+        <td style="color:var(--text2);">${e.cat}</td>
+        <td style="color:var(--text3);font-size:12px;">${e.ref||'—'}</td>
+        <td class="amt-pos">${e.type==='Credit'?fmt(e.amount):'—'}</td>
+        <td class="amt-neg">${e.type==='Debit'?fmt(e.amount):'—'}</td>
+        <td style="font-weight:600;color:${(balMap[e.id]||0)>0?'var(--red)':'var(--accent)'};">${fmt(Math.abs(balMap[e.id]||0))}</td>
+        <td><button class="btn red sm" onclick="deleteCardEntry('${e.id}')">✕</button></td>
+      </tr>`).join('') +
+      `<tr style="background:var(--bg);font-weight:700;">
+        <td colspan="4" style="padding:10px 12px;">Total</td>
+        <td class="amt-pos">${fmt(totalCredit)}</td>
+        <td class="amt-neg">${fmt(totalDebit)}</td>
+        <td style="color:var(--red);">${fmt(outstanding)} outstanding</td>
+        <td></td>
+      </tr>`;
+  }
+}
+
+function exportCardStatement() {
+  const cards = getCards();
+  const cardId = document.getElementById('cs-card').value;
+  const card = cards.find(c=>c.id===cardId);
+  if (!card) { toast('Select a card first.'); return; }
+  const month = document.getElementById('cs-month').value;
+  let entries = getCardEntries().filter(e=>e.cardId===cardId);
+  if (month) entries = entries.filter(e=>e.date.startsWith(month));
+  entries = entries.sort((a,b)=>a.date.localeCompare(b.date));
+
+  let runBal = 0;
+  const rows = [['Date','Description','Category','Reference','Credit (Payment)','Debit (Spend)','Outstanding Balance']];
+  entries.forEach(e => {
+    runBal += e.type==='Debit'?e.amount:-e.amount;
+    rows.push([e.date, e.desc||e.cat, e.cat, e.ref||'', e.type==='Credit'?e.amount:'', e.type==='Debit'?e.amount:'', runBal.toFixed(2)]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const infoRows = [['Credit Card Statement'],['Card:', card.name+(card.last4?' (••••'+card.last4+')':'')],['Bank:', card.bank||'—'],['Credit Limit:', card.limit||'—'],['Due Date:', card.dueDate],['Period:', month||'All'],['Generated:', today()],[''],['© 2026 Felevare Global Ventures LLP']];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(infoRows), 'Info');
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [12,30,16,18,16,14,18].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'Statement');
+  XLSX.writeFile(wb, `${card.name}_Statement_${month||'All'}.xlsx`);
+  toast('Card statement exported ✓');
 }
 
 function renderCards() {
   const cards = getCards();
   const today_str = today();
-  const totalDue = cards.reduce((a, c) => a + c.outstanding, 0);
-  const overdue  = cards.filter(c => c.dueDate < today_str);
-  const dueSoon  = cards.filter(c => c.dueDate >= today_str && daysDiff(today_str, c.dueDate) <= 5);
+  const totalOut = cards.reduce((a,c)=>a+getCardBalance(c.id),0);
+  const overdue  = cards.filter(c=>c.dueDate<today_str && getCardBalance(c.id)>0);
+  const dueSoon  = cards.filter(c=>c.dueDate>=today_str && daysDiff(today_str,c.dueDate)<=5 && getCardBalance(c.id)>0);
 
   document.getElementById('card-metrics').innerHTML = `
-    <div class="metric"><div class="m-label">Total outstanding</div><div class="m-value m-expense">${fmt(totalDue)}</div></div>
+    <div class="metric"><div class="m-label">Total outstanding</div><div class="m-value m-expense">${fmt(totalOut)}</div></div>
     <div class="metric"><div class="m-label">Cards</div><div class="m-value" style="color:var(--blue);">${cards.length}</div></div>
     <div class="metric"><div class="m-label">Overdue</div><div class="m-value ${overdue.length?'m-expense':'m-income'}">${overdue.length}</div></div>
     <div class="metric"><div class="m-label">Due in 5 days</div><div class="m-value ${dueSoon.length?'m-expense':'m-income'}">${dueSoon.length}</div></div>
   `;
 
-  // Alerts
   let alerts = '';
-  overdue.forEach(c => alerts += `<div style="background:var(--red-light);color:var(--red);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">⚠️ ${c.name} — Payment OVERDUE since ${c.dueDate}! Outstanding: ${fmt(c.outstanding)}</div>`);
-  dueSoon.forEach(c => alerts += `<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${c.name} — Due in ${daysDiff(today_str, c.dueDate)} days (${c.dueDate}). Pay: ${fmt(c.outstanding)}</div>`);
+  overdue.forEach(c=>alerts+=`<div style="background:var(--red-light);color:var(--red);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">⚠️ ${c.name} — OVERDUE since ${c.dueDate}! Outstanding: ${fmt(getCardBalance(c.id))}</div>`);
+  dueSoon.forEach(c=>alerts+=`<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${c.name} — Due in ${daysDiff(today_str,c.dueDate)} days (${c.dueDate}). Outstanding: ${fmt(getCardBalance(c.id))}</div>`);
   document.getElementById('card-due-alert').innerHTML = alerts;
 
-  document.getElementById('card-list').innerHTML = cards.length ? cards.map(c => {
+  if (cards.length) {
+    document.getElementById('card-stmt-card').style.display = 'block';
+    renderCardStatement();
+  } else {
+    document.getElementById('card-stmt-card').style.display = 'none';
+  }
+
+  document.getElementById('card-list').innerHTML = cards.length ? cards.map(c=>{
+    const outstanding = getCardBalance(c.id);
     const days = daysDiff(today_str, c.dueDate);
     const isOverdue = c.dueDate < today_str;
-    const utilization = c.limit > 0 ? Math.round(c.outstanding / c.limit * 100) : 0;
-    const barCol = utilization > 80 ? 'var(--red)' : utilization > 50 ? 'var(--amber)' : 'var(--accent)';
-    return `<div style="padding:14px 0;border-bottom:1px solid var(--border);">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <div style="font-size:24px;">💳</div>
+    const util = c.limit>0?Math.min(Math.round(outstanding/c.limit*100),100):0;
+    const barCol = util>80?'var(--red)':util>50?'var(--amber)':'var(--accent)';
+    return `<div class="card" style="margin-bottom:0.75rem;padding:1rem;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:28px;">💳</div>
         <div style="flex:1;">
-          <div style="font-weight:600;">${c.name} ${c.bank?'('+c.bank+')':''}</div>
+          <div style="font-weight:700;">${c.name} ${c.last4?'(••••'+c.last4+')':''} ${c.bank?'· '+c.bank:''}</div>
           <div style="font-size:12px;color:${isOverdue?'var(--red)':'var(--text2)'};">
-            ${isOverdue ? '⚠️ OVERDUE since' : '📅 Due on'} ${c.dueDate}
-            ${!isOverdue ? `· ${days} day${days!==1?'s':''} left` : ''}
+            ${isOverdue?'⚠️ OVERDUE since':'📅 Due'} ${c.dueDate}${!isOverdue?' · '+days+' day(s) left':''}
+            ${c.stmtDate?' · Stmt date: '+c.stmtDate:''}
           </div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:16px;font-weight:700;color:var(--red);">${fmt(c.outstanding)}</div>
-          ${c.minPayment ? `<div style="font-size:11px;color:var(--text3);">Min: ${fmt(c.minPayment)}</div>` : ''}
+          <div style="font-size:18px;font-weight:700;color:${outstanding>0?'var(--red)':'var(--accent)'};">${fmt(outstanding)}</div>
+          ${c.minPayment?`<div style="font-size:11px;color:var(--text3);">Min pay: ${fmt(c.minPayment)}</div>`:''}
         </div>
         <button class="btn red sm" onclick="deleteCard('${c.id}')">✕</button>
       </div>
-      ${c.limit ? `<div style="display:flex;align-items:center;gap:8px;">
+      ${c.limit?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-          <div style="height:100%;width:${utilization}%;background:${barCol};border-radius:3px;"></div>
+          <div style="height:100%;width:${util}%;background:${barCol};border-radius:3px;"></div>
         </div>
-        <span style="font-size:11px;color:var(--text3);">${utilization}% of ${fmt(c.limit)}</span>
-      </div>` : ''}
+        <span style="font-size:11px;color:var(--text3);">${util}% of ${fmt(c.limit)} used</span>
+      </div>`:''}
     </div>`;
-  }).join('') : '<div class="empty"><div class="ei">💳</div>No credit cards added yet</div>';
+  }).join(''):'<div class="empty"><div class="ei">💳</div>No credit cards added yet</div>';
 }
 
 function daysDiff(from, to) {
