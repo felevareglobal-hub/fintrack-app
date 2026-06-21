@@ -823,8 +823,49 @@
             <select id="cs-card" onchange="renderCardStatement()" style="flex:1;min-width:140px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"></select>
             <input type="month" id="cs-month" onchange="renderCardStatement()" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;">
             <button class="btn sm green" onclick="addCardEntry()">+ Add entry</button>
+            <button class="btn sm" style="background:#EFF6FF;color:#1D4ED8;border-color:#93C5FD;" onclick="openCardPaymentForm()">💳 Record payment</button>
             <button class="btn sm blue" onclick="exportCardStatement()">📊 Export</button>
           </div>
+
+          <!-- CARD PAYMENT FORM -->
+          <div id="card-payment-form" style="display:none;background:#EFF6FF;border:1.5px solid #93C5FD;border-radius:var(--radius-sm);padding:14px;margin-bottom:1rem;">
+            <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:10px;">💳 Record Credit Card Payment</div>
+            <div class="form-row c4">
+              <div class="fl"><label>Date</label><input type="date" id="cp-date"></div>
+              <div class="fl"><label>Payment amount (₹)</label><input type="number" id="cp-amt" placeholder="0" min="0" oninput="updatePaymentPreview()"></div>
+              <div class="fl"><label>Payment type</label>
+                <select id="cp-type" onchange="updatePaymentPreview()">
+                  <option value="full">Full payment</option>
+                  <option value="min">Minimum due</option>
+                  <option value="partial">Partial payment</option>
+                  <option value="emi">EMI payment</option>
+                </select>
+              </div>
+              <div class="fl"><label>Paid from bank</label>
+                <select id="cp-bank">
+                  <option value="">-- Select bank --</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row c3">
+              <div class="fl"><label>Payment mode</label>
+                <select id="cp-mode">
+                  <option>NEFT</option><option>RTGS</option><option>IMPS</option><option>UPI</option><option>Auto-debit</option><option>Cheque</option><option>Net banking</option>
+                </select>
+              </div>
+              <div class="fl"><label>Reference / UTR</label><input type="text" id="cp-ref" placeholder="Transaction reference"></div>
+              <div class="fl"><label>Notes</label><input type="text" id="cp-note" placeholder="Optional note"></div>
+            </div>
+            <!-- Payment preview -->
+            <div id="cp-preview" style="display:none;background:white;border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;border:1px solid var(--border);">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;" id="cp-preview-grid"></div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn sm" style="background:var(--blue);color:white;border-color:var(--blue);" onclick="saveCardPayment()">✓ Record payment</button>
+              <button class="btn sm" onclick="document.getElementById('card-payment-form').style.display='none'">Cancel</button>
+            </div>
+          </div>
+
           <!-- ADD CARD ENTRY FORM -->
           <div id="card-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
             <div class="form-row c4">
@@ -3034,6 +3075,11 @@ function renderBankLedger() {
         transferLabel = `<span style="font-size:10px;background:var(--purple-light);color:var(--purple);padding:1px 6px;border-radius:10px;margin-left:4px;">⇄ From: ${fb?fb.name:'?'}</span>`;
       }
     }
+    if (e.isCardPayment && e.linkedCardId) {
+      const cards = getCards();
+      const cc = cards.find(c => c.id === e.linkedCardId);
+      transferLabel = `<span style="font-size:10px;background:var(--blue-light);color:var(--blue);padding:1px 6px;border-radius:10px;margin-left:4px;">💳 Card: ${cc?cc.name:'Credit Card'}</span>`;
+    }
     return `<tr>
       <td style="white-space:nowrap;">${e.date}</td>
       <td>${e.desc||e.mode}${transferLabel}</td>
@@ -3220,8 +3266,134 @@ function getCardBalance(cardId) {
 }
 
 function addCardEntry() {
+  document.getElementById('card-payment-form').style.display = 'none';
   document.getElementById('card-entry-form').style.display = 'block';
   document.getElementById('ce-date').value = today();
+}
+
+function openCardPaymentForm() {
+  document.getElementById('card-entry-form').style.display = 'none';
+  const form = document.getElementById('card-payment-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('cp-date').value = today();
+
+  // Populate bank dropdown
+  const banks = getBanks();
+  const bankSel = document.getElementById('cp-bank');
+  bankSel.innerHTML = '<option value="">-- Select bank --</option>' +
+    banks.map(b => `<option value="${b.id}">${b.name} (${fmt(getBankBalance(b.id))})</option>`).join('');
+
+  // Auto-fill amount based on card outstanding
+  const cardId = document.getElementById('cs-card').value;
+  const cards = getCards();
+  const card = cards.find(c => c.id === cardId);
+  if (card) {
+    const outstanding = getCardBalance(cardId);
+    document.getElementById('cp-amt').value = outstanding > 0 ? outstanding.toFixed(0) : '';
+    updatePaymentPreview();
+  }
+}
+
+function updatePaymentPreview() {
+  const amt = parseFloat(document.getElementById('cp-amt').value) || 0;
+  const type = document.getElementById('cp-type').value;
+  const cardId = document.getElementById('cs-card').value;
+  const bankId = document.getElementById('cp-bank').value;
+  if (!amt) { document.getElementById('cp-preview').style.display = 'none'; return; }
+
+  const outstanding = getCardBalance(cardId);
+  const afterPayment = Math.max(0, outstanding - amt);
+  const bankBal = bankId ? getBankBalance(bankId) : 0;
+  const bankAfter = bankId ? bankBal - amt : null;
+
+  document.getElementById('cp-preview').style.display = 'block';
+  document.getElementById('cp-preview-grid').innerHTML = `
+    <div><div style="font-size:11px;color:var(--text3);">Card outstanding (before)</div><div style="font-size:14px;font-weight:700;color:var(--red);">${fmt(outstanding)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Payment amount</div><div style="font-size:14px;font-weight:700;color:var(--blue);">${fmt(amt)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">Card outstanding (after)</div><div style="font-size:14px;font-weight:700;color:${afterPayment===0?'var(--accent)':'var(--amber)'};">${fmt(afterPayment)}</div></div>
+    ${bankId ? `<div><div style="font-size:11px;color:var(--text3);">Bank balance (before)</div><div style="font-size:14px;font-weight:700;">${fmt(bankBal)}</div></div>` : ''}
+    ${bankId ? `<div><div style="font-size:11px;color:var(--text3);">Bank balance (after)</div><div style="font-size:14px;font-weight:700;color:${(bankAfter||0)<0?'var(--red)':'var(--accent)'};">${fmt(bankAfter||0)}</div></div>` : ''}
+    <div><div style="font-size:11px;color:var(--text3);">Payment type</div><div style="font-size:14px;font-weight:700;">${type.charAt(0).toUpperCase()+type.slice(1)}</div></div>
+  `;
+}
+
+function saveCardPayment() {
+  const cardId = document.getElementById('cs-card').value;
+  const bankId = document.getElementById('cp-bank').value;
+  const date   = document.getElementById('cp-date').value || today();
+  const amt    = parseFloat(document.getElementById('cp-amt').value) || 0;
+  const type   = document.getElementById('cp-type').value;
+  const mode   = document.getElementById('cp-mode').value;
+  const ref    = document.getElementById('cp-ref').value.trim();
+  const note   = document.getElementById('cp-note').value.trim();
+
+  if (!amt || amt <= 0) { toast('Enter a valid payment amount.'); return; }
+
+  const cards = getCards();
+  const card  = cards.find(c => c.id === cardId);
+  if (!card) { toast('No card selected.'); return; }
+
+  const outstanding = getCardBalance(cardId);
+  if (outstanding <= 0) { toast('No outstanding balance on this card.'); return; }
+  if (amt > outstanding && !confirm(`Payment ${fmt(amt)} exceeds outstanding ${fmt(outstanding)}. Proceed?`)) return;
+  if (bankId) {
+    const bankBal = getBankBalance(bankId);
+    if (amt > bankBal && !confirm(`Bank balance is only ${fmt(bankBal)}. Proceed anyway?`)) return;
+  }
+
+  const paymentId = 'PAY_' + Date.now().toString();
+  const typeLabel = type === 'full' ? 'Full Payment' : type === 'min' ? 'Minimum Due Payment' : type === 'emi' ? 'EMI Payment' : 'Partial Payment';
+  const desc = note || `${typeLabel} — ${card.name}`;
+
+  // 1. Credit card ledger — Credit entry (reduces outstanding)
+  const cardEntries = getCardEntries();
+  cardEntries.push({
+    id: paymentId + '_CC',
+    cardId, date,
+    type: 'Credit',
+    amount: amt,
+    cat: 'Payment',
+    desc: desc,
+    ref: ref || paymentId,
+    paymentType: type,
+    linkedBankId: bankId,
+    isPayment: true
+  });
+  saveCardEntries(cardEntries);
+
+  // 2. Bank ledger — Debit entry (reduces bank balance) if bank selected
+  if (bankId) {
+    const bankEntries = getBankEntries();
+    const banks = getBanks();
+    bankEntries.push({
+      id: paymentId + '_BK',
+      bankId, date,
+      type: 'Debit',
+      amount: amt,
+      mode,
+      desc: `Credit card payment — ${card.name}${card.last4?' (••••'+card.last4+')':''}`,
+      ref: ref || paymentId,
+      linkedCardId: cardId,
+      isCardPayment: true
+    });
+    saveBankEntries(bankEntries);
+  }
+
+  // 3. Clear form
+  document.getElementById('card-payment-form').style.display = 'none';
+  document.getElementById('cp-amt').value = '';
+  document.getElementById('cp-ref').value = '';
+  document.getElementById('cp-note').value = '';
+  document.getElementById('cp-preview').style.display = 'none';
+
+  // 4. Refresh all
+  renderCardStatement();
+  renderCards();
+  if (bankId) renderBanks();
+
+  const banks = getBanks();
+  const bankName = bankId ? (banks.find(b=>b.id===bankId)||{}).name : null;
+  toast(`✓ ${fmt(amt)} payment recorded${bankName?' from '+bankName:''}`);
 }
 
 function saveCardEntry() {
@@ -3242,8 +3414,18 @@ function saveCardEntry() {
 }
 
 function deleteCardEntry(id) {
-  if (!confirm('Delete this entry?')) return;
-  saveCardEntries(getCardEntries().filter(e=>e.id!==id));
+  const entry = getCardEntries().find(e => e.id === id);
+  if (!entry) return;
+  if (entry.isPayment && entry.linkedBankId) {
+    if (!confirm('This payment is linked to a bank account. Deleting will also remove the bank debit entry. Continue?')) return;
+    // Remove linked bank entry
+    const paymentId = id.replace('_CC', '');
+    saveBankEntries(getBankEntries().filter(e => e.id !== paymentId + '_BK'));
+    renderBanks();
+  } else {
+    if (!confirm('Delete this entry?')) return;
+  }
+  saveCardEntries(getCardEntries().filter(e => e.id !== id));
   renderCardStatement(); renderCards(); toast('Deleted');
 }
 
