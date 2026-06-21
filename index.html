@@ -1561,9 +1561,34 @@ function populateCats() {
 
 function updateSub() {
   const cat = document.getElementById('t-cat').value;
-  const subs = (CATS[currentType] && CATS[currentType][cat]) ? CATS[currentType][cat] : [];
+  let subs = (CATS[currentType] && CATS[currentType][cat]) ? [...CATS[currentType][cat]] : [];
   const sel = document.getElementById('t-sub');
   sel.disabled = false;
+
+  // Dynamically inject real bank names for Savings
+  if (currentType === 'Savings') {
+    const banks = getBanks();
+    if (banks.length > 0) {
+      subs = banks.map(b => b.name);
+    }
+  }
+
+  // Dynamically inject real credit card names for Expenses > Credit Card
+  if (currentType === 'Expenses' && cat === 'Credit Card') {
+    const cards = getCards();
+    if (cards.length > 0) {
+      subs = cards.map(c => c.name + (c.last4 ? ' (••••'+c.last4+')' : ''));
+    }
+  }
+
+  // Dynamically inject real bank names for Expenses > Loans repayment
+  if (currentType === 'Expenses' && cat === 'Loans') {
+    const loans = getLoans();
+    if (loans.length > 0) {
+      subs = loans.map(l => l.type + ' — ' + l.lender);
+    }
+  }
+
   if (subs.length) {
     sel.innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
     sel.style.opacity = '1';
@@ -2538,8 +2563,27 @@ function updateEditCats(selCat, selSub) {
 
 function updateEditSub(selSub) {
   const type = document.getElementById('e-type').value;
-  const cat = document.getElementById('e-cat').value;
-  const subs = (CATS[type] && CATS[type][cat]) ? CATS[type][cat] : [];
+  const cat  = document.getElementById('e-cat').value;
+  let subs   = (CATS[type] && CATS[type][cat]) ? [...CATS[type][cat]] : [];
+
+  // Dynamically inject real bank names for Savings
+  if (type === 'Savings') {
+    const banks = getBanks();
+    if (banks.length > 0) subs = banks.map(b => b.name);
+  }
+
+  // Dynamically inject real credit card names
+  if (type === 'Expenses' && cat === 'Credit Card') {
+    const cards = getCards();
+    if (cards.length > 0) subs = cards.map(c => c.name + (c.last4 ? ' (••••'+c.last4+')' : ''));
+  }
+
+  // Dynamically inject real loan names
+  if (type === 'Expenses' && cat === 'Loans') {
+    const loans = getLoans();
+    if (loans.length > 0) subs = loans.map(l => l.type + ' — ' + l.lender);
+  }
+
   const sel = document.getElementById('e-sub');
   if (subs.length) {
     sel.innerHTML = subs.map(s => `<option ${s===selSub?'selected':''}>${s}</option>`).join('');
