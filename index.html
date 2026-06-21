@@ -316,6 +316,10 @@
   <!-- SIDEBAR -->
   <nav class="sidebar">
     <div class="mob-brand"><span>💰</span> FinTrack</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+      <span id="mob-sync" style="font-size:11px;color:rgba(255,255,255,0.4);">☁</span>
+      <button onclick="openDrawer()" style="background:none;border:none;color:white;font-size:22px;cursor:pointer;padding:4px;">☰</button>
+    </div>
     <div class="sidebar-logo">
       <div class="logo-row">
         <div class="icon">💰</div>
@@ -358,15 +362,53 @@
     </div>
   </nav>
 
-  <!-- MOBILE NAV -->
+  <!-- MOBILE OVERLAY -->
+  <div class="mob-overlay" id="mob-overlay" onclick="closeDrawer()"></div>
+
+  <!-- MOBILE DRAWER (slide-out full menu) -->
+  <div class="mob-drawer" id="mob-drawer">
+    <div style="padding:1rem;border-bottom:1px solid var(--navy3);display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;color:white;font-size:16px;font-weight:700;"><span>💰</span>FinTrack</div>
+      <button onclick="closeDrawer()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:0.5rem 0;flex:1;">
+      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Overview</div>
+      <a class="nav-item" onclick="showPage('dashboard');closeDrawer()"><span class="ni">📊</span> Dashboard</a>
+      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Money</div>
+      <a class="nav-item" onclick="showPage('add');closeDrawer()"><span class="ni">➕</span> Add Transaction</a>
+      <a class="nav-item" onclick="showPage('transactions');closeDrawer()"><span class="ni">📋</span> Transactions</a>
+      <a class="nav-item" onclick="showPage('recurring');closeDrawer()"><span class="ni">🔄</span> Recurring</a>
+      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Planning</div>
+      <a class="nav-item" onclick="showPage('budget');closeDrawer()"><span class="ni">🎯</span> Budget</a>
+      <a class="nav-item" onclick="showPage('fy');closeDrawer()"><span class="ni">📅</span> Financial Year</a>
+      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Tracking</div>
+      <a class="nav-item" onclick="showPage('banks');closeDrawer()"><span class="ni">🏦</span> Bank Balances</a>
+      <a class="nav-item" onclick="showPage('cards');closeDrawer()"><span class="ni">💳</span> Card Reminders</a>
+      <div style="padding:0.5rem 1rem;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);font-weight:600;">Settings</div>
+      <a class="nav-item" onclick="showPage('categories');closeDrawer()"><span class="ni">🗂</span> Categories</a>
+      <a class="nav-item" onclick="showPage('users');closeDrawer()"><span class="ni">👥</span> Users</a>
+      <a class="nav-item" onclick="showPage('export');closeDrawer()"><span class="ni">📤</span> Export / Import</a>
+    </div>
+    <div style="padding:0.75rem 1rem;border-top:1px solid var(--navy3);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:12px;color:rgba(255,255,255,0.4);">🌙 Dark mode</span>
+        <label class="switch" style="margin-left:auto;">
+          <input type="checkbox" id="dark-toggle-mob" onchange="toggleDark(this.checked);document.getElementById('dark-toggle').checked=this.checked;">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
+    </div>
+  </div>
+
+  <!-- MOBILE BOTTOM NAV — 5 key pages + More -->
   <div class="mob-nav">
-    <button onclick="showPage('dashboard')" id="mn-dashboard"><span class="ni">📊</span>Dashboard</button>
+    <button onclick="showPage('dashboard')" id="mn-dashboard"><span class="ni">📊</span>Home</button>
     <button onclick="showPage('add')" id="mn-add"><span class="ni">➕</span>Add</button>
-    <button onclick="showPage('transactions')" id="mn-transactions"><span class="ni">📋</span>Ledger</button>
+    <button onclick="showPage('transactions')" id="mn-transactions"><span class="ni">📋</span>Txns</button>
+    <button onclick="showPage('recurring')" id="mn-recurring"><span class="ni">🔄</span>Recur</button>
     <button onclick="showPage('budget')" id="mn-budget"><span class="ni">🎯</span>Budget</button>
-    <button onclick="showPage('fy')" id="mn-fy"><span class="ni">📅</span>FY</button>
-    <button onclick="showPage('categories')" id="mn-categories"><span class="ni">🗂</span>Cats</button>
-    <button onclick="showPage('export')" id="mn-export"><span class="ni">📤</span>Export</button>
+    <button onclick="openDrawer()" id="mn-more"><span class="ni">☰</span>More</button>
   </div>
 
   <!-- MAIN -->
@@ -2209,6 +2251,20 @@ async function manualSync() {
   await syncFromSupabase();
   renderDashboard();
   toast('Synced with cloud ✓');
+}
+
+// ===================== MOBILE DRAWER =====================
+function openDrawer() {
+  document.getElementById('mob-drawer').classList.add('open');
+  document.getElementById('mob-overlay').classList.add('open');
+  // Sync dark toggle state
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const mobTog = document.getElementById('dark-toggle-mob');
+  if (mobTog) mobTog.checked = isDark;
+}
+function closeDrawer() {
+  document.getElementById('mob-drawer').classList.remove('open');
+  document.getElementById('mob-overlay').classList.remove('open');
 }
 
 // ===================== DARK MODE =====================
