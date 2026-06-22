@@ -1577,6 +1577,9 @@ async function loginAs(user) {
   initEmailJS();
   showPage('dashboard');
   await syncFromSupabase();
+  await syncTrackingFromSupabase();
+  // Migrate any local-only tracking data to Supabase
+  await migrateTrackingToSupabase();
   processRecurring();
   updatePendingBadge();
   renderDashboard();
@@ -2850,7 +2853,9 @@ function resetCats() {
 }
 
 async function manualSync() {
+  showSyncStatus('Syncing...');
   await syncFromSupabase();
+  await syncTrackingFromSupabase();
   renderDashboard();
   toast('Synced with cloud ✓');
 }
@@ -2921,9 +2926,9 @@ function installPWA() {
 // ===================== BANK BALANCE TRACKER =====================
 let bankChart2;
 function getBanks() { return JSON.parse(localStorage.getItem('fintrack_banks') || '[]'); }
-function saveBanks(b) { localStorage.setItem('fintrack_banks', JSON.stringify(b)); }
+function saveBanks(b) { localStorage.setItem('fintrack_banks', JSON.stringify(b)); pushBanksToSupa(b); }
 function getBankEntries() { return JSON.parse(localStorage.getItem('fintrack_bank_entries') || '[]'); }
-function saveBankEntries(e) { localStorage.setItem('fintrack_bank_entries', JSON.stringify(e)); }
+function saveBankEntries(e) { localStorage.setItem('fintrack_bank_entries', JSON.stringify(e)); pushBankEntriesToSupa(e); }
 
 function addBank() {
   const name  = document.getElementById('b-name').value.trim();
@@ -3266,9 +3271,9 @@ function autoSyncTxnsToBanks() {
 
 // ===================== CREDIT CARD FULL LEDGER =====================
 function getCards() { return JSON.parse(localStorage.getItem('fintrack_cards') || '[]'); }
-function saveCards(c) { localStorage.setItem('fintrack_cards', JSON.stringify(c)); }
+function saveCards(c) { localStorage.setItem('fintrack_cards', JSON.stringify(c)); pushCardsToSupa(c); }
 function getCardEntries() { return JSON.parse(localStorage.getItem('fintrack_card_entries') || '[]'); }
-function saveCardEntries(e) { localStorage.setItem('fintrack_card_entries', JSON.stringify(e)); }
+function saveCardEntries(e) { localStorage.setItem('fintrack_card_entries', JSON.stringify(e)); pushCardEntriesToSupa(e); }
 
 function addCard() {
   const name  = document.getElementById('cc-name').value.trim();
@@ -3754,7 +3759,7 @@ function getGSTSummary(data) {
 // ===================== LOAN TRACKER =====================
 let loanChart2;
 function getLoans() { return JSON.parse(localStorage.getItem('fintrack_loans') || '[]'); }
-function saveLoans(l) { localStorage.setItem('fintrack_loans', JSON.stringify(l)); }
+function saveLoans(l) { localStorage.setItem('fintrack_loans', JSON.stringify(l)); pushLoansToSupa(l); }
 
 function calcLoanDetails() {
   const emi      = parseFloat(document.getElementById('ln-emi').value) || 0;
@@ -4080,9 +4085,9 @@ function getOrdinal(n) {
 
 // ===================== OVERDRAFT TRACKER =====================
 function getODs() { return JSON.parse(localStorage.getItem('fintrack_ods') || '[]'); }
-function saveODs(o) { localStorage.setItem('fintrack_ods', JSON.stringify(o)); }
+function saveODs(o) { localStorage.setItem('fintrack_ods', JSON.stringify(o)); pushODsToSupa(o); }
 function getODEntries() { return JSON.parse(localStorage.getItem('fintrack_od_entries') || '[]'); }
-function saveODEntries(e) { localStorage.setItem('fintrack_od_entries', JSON.stringify(e)); }
+function saveODEntries(e) { localStorage.setItem('fintrack_od_entries', JSON.stringify(e)); pushODEntriesToSupa(e); }
 
 function calcOD() {
   const limit = parseFloat(document.getElementById('od-limit').value) || 0;
@@ -4405,6 +4410,217 @@ function renderOverdraft() {
       ${od.note?`<div style="font-size:12px;color:var(--text3);margin-top:8px;">📝 ${od.note}</div>`:''}
     </div>`;
   }).join('') : '';
+}
+
+// ===================== TRACKING DATA — SUPABASE SYNC =====================
+
+// ---- PUSH functions (local → Supabase) ----
+async function pushBanksToSupa(banks) {
+  try {
+    // Delete all existing banks for this user then re-insert
+    await sbDelete('fintrack_banks', 'user_id', currentUser?.id || 'all');
+    if (!banks.length) return;
+    await sbUpsert('fintrack_banks', banks.map(b => ({
+      id: b.id, user_id: currentUser?.id, name: b.name, type: b.type,
+      opening_balance: b.openingBalance || 0, date: b.date,
+      accno: b.accno || '', ifsc: b.ifsc || ''
+    })));
+  } catch(e) {}
+}
+
+async function pushBankEntriesToSupa(entries) {
+  try {
+    if (!entries.length) return;
+    // Upsert all entries
+    for (const e of entries) {
+      await sbUpsert('fintrack_bank_entries', {
+        id: e.id, bank_id: e.bankId, date: e.date, type: e.type,
+        amount: e.amount, mode: e.mode || '', description: e.desc || '',
+        ref: e.ref || '', transfer_id: e.transferId || '',
+        is_transfer: e.isTransfer || false,
+        transfer_to: e.transferTo || '', transfer_from: e.transferFrom || '',
+        is_card_payment: e.isCardPayment || false, linked_card_id: e.linkedCardId || ''
+      });
+    }
+  } catch(e) {}
+}
+
+async function pushCardsToSupa(cards) {
+  try {
+    await sbDelete('fintrack_cards', 'user_id', currentUser?.id || 'all');
+    if (!cards.length) return;
+    await sbUpsert('fintrack_cards', cards.map(c => ({
+      id: c.id, user_id: currentUser?.id, name: c.name, bank: c.bank || '',
+      credit_limit: c.limit || 0, due_date: c.dueDate || '',
+      stmt_date: c.stmtDate || '', min_payment: c.minPayment || 0, last4: c.last4 || ''
+    })));
+  } catch(e) {}
+}
+
+async function pushCardEntriesToSupa(entries) {
+  try {
+    if (!entries.length) return;
+    for (const e of entries) {
+      await sbUpsert('fintrack_card_entries', {
+        id: e.id, card_id: e.cardId, date: e.date, type: e.type,
+        amount: e.amount, cat: e.cat || '', description: e.desc || '',
+        ref: e.ref || '', payment_type: e.paymentType || '',
+        linked_bank_id: e.linkedBankId || '', is_payment: e.isPayment || false
+      });
+    }
+  } catch(e) {}
+}
+
+async function pushLoansToSupa(loans) {
+  try {
+    await sbDelete('fintrack_loans', 'user_id', currentUser?.id || 'all');
+    if (!loans.length) return;
+    await sbUpsert('fintrack_loans', loans.map(l => ({
+      id: l.id, user_id: currentUser?.id, type: l.type, lender: l.lender,
+      amount: l.amount, outstanding: l.outstanding, emi: l.emi, rate: l.rate,
+      emi_date: l.emiDate || '', start_date: l.start || '',
+      tenure: l.tenure, paid: l.paid, accno: l.accno || '',
+      coapplicant: l.coapplicant || '', note: l.note || '', added_on: l.addedOn || ''
+    })));
+  } catch(e) {}
+}
+
+async function pushODsToSupa(ods) {
+  try {
+    await sbDelete('fintrack_ods', 'user_id', currentUser?.id || 'all');
+    if (!ods.length) return;
+    await sbUpsert('fintrack_ods', ods.map(o => ({
+      id: o.id, user_id: currentUser?.id, bank: o.bank, type: o.type,
+      od_limit: o.limit, used: o.used || 0, rate: o.rate || 0,
+      renewal: o.renewal || '', accno: o.accno || '',
+      security: o.security || '', note: o.note || '', added_on: o.addedOn || ''
+    })));
+  } catch(e) {}
+}
+
+async function pushODEntriesToSupa(entries) {
+  try {
+    if (!entries.length) return;
+    for (const e of entries) {
+      await sbUpsert('fintrack_od_entries', {
+        id: e.id, od_id: e.odId, date: e.date, type: e.type,
+        amount: e.amount, description: e.desc || '', ref: e.ref || ''
+      });
+    }
+  } catch(e) {}
+}
+
+// ---- PULL functions (Supabase → local) ----
+async function syncTrackingFromSupabase() {
+  if (!currentUser) return;
+  try {
+    const uid = currentUser.id;
+    const [banks, bankEntries, cards, cardEntries, loans, ods, odEntries] = await Promise.all([
+      sbGet('fintrack_banks', `user_id=eq.${uid}`),
+      sbGet('fintrack_bank_entries'),
+      sbGet('fintrack_cards', `user_id=eq.${uid}`),
+      sbGet('fintrack_card_entries'),
+      sbGet('fintrack_loans', `user_id=eq.${uid}`),
+      sbGet('fintrack_ods', `user_id=eq.${uid}`),
+      sbGet('fintrack_od_entries')
+    ]);
+
+    if (banks.length) {
+      const mappedBanks = banks.map(b => ({
+        id: b.id, name: b.name, type: b.type,
+        openingBalance: parseFloat(b.opening_balance)||0,
+        date: b.date, accno: b.accno, ifsc: b.ifsc
+      }));
+      localStorage.setItem('fintrack_banks', JSON.stringify(mappedBanks));
+    }
+
+    if (bankEntries.length) {
+      const mappedBE = bankEntries.map(e => ({
+        id: e.id, bankId: e.bank_id, date: e.date, type: e.type,
+        amount: parseFloat(e.amount)||0, mode: e.mode, desc: e.description,
+        ref: e.ref, transferId: e.transfer_id, isTransfer: e.is_transfer,
+        transferTo: e.transfer_to, transferFrom: e.transfer_from,
+        isCardPayment: e.is_card_payment, linkedCardId: e.linked_card_id
+      }));
+      localStorage.setItem('fintrack_bank_entries', JSON.stringify(mappedBE));
+    }
+
+    if (cards.length) {
+      const mappedCards = cards.map(c => ({
+        id: c.id, name: c.name, bank: c.bank,
+        limit: parseFloat(c.credit_limit)||0, dueDate: c.due_date,
+        stmtDate: c.stmt_date, minPayment: parseFloat(c.min_payment)||0, last4: c.last4
+      }));
+      localStorage.setItem('fintrack_cards', JSON.stringify(mappedCards));
+    }
+
+    if (cardEntries.length) {
+      const mappedCE = cardEntries.map(e => ({
+        id: e.id, cardId: e.card_id, date: e.date, type: e.type,
+        amount: parseFloat(e.amount)||0, cat: e.cat, desc: e.description,
+        ref: e.ref, paymentType: e.payment_type, linkedBankId: e.linked_bank_id,
+        isPayment: e.is_payment
+      }));
+      localStorage.setItem('fintrack_card_entries', JSON.stringify(mappedCE));
+    }
+
+    if (loans.length) {
+      const mappedLoans = loans.map(l => ({
+        id: l.id, type: l.type, lender: l.lender,
+        amount: parseFloat(l.amount)||0, outstanding: parseFloat(l.outstanding)||0,
+        emi: parseFloat(l.emi)||0, rate: parseFloat(l.rate)||0,
+        emiDate: l.emi_date, start: l.start_date,
+        tenure: parseInt(l.tenure)||0, paid: parseInt(l.paid)||0,
+        accno: l.accno, coapplicant: l.coapplicant, note: l.note, addedOn: l.added_on
+      }));
+      localStorage.setItem('fintrack_loans', JSON.stringify(mappedLoans));
+    }
+
+    if (ods.length) {
+      const mappedODs = ods.map(o => ({
+        id: o.id, bank: o.bank, type: o.type,
+        limit: parseFloat(o.od_limit)||0, used: parseFloat(o.used)||0,
+        rate: parseFloat(o.rate)||0, renewal: o.renewal,
+        accno: o.accno, security: o.security, note: o.note, addedOn: o.added_on
+      }));
+      localStorage.setItem('fintrack_ods', JSON.stringify(mappedODs));
+    }
+
+    if (odEntries.length) {
+      const mappedODE = odEntries.map(e => ({
+        id: e.id, odId: e.od_id, date: e.date, type: e.type,
+        amount: parseFloat(e.amount)||0, desc: e.description, ref: e.ref
+      }));
+      localStorage.setItem('fintrack_od_entries', JSON.stringify(mappedODE));
+    }
+
+    console.log('Tracking data synced from Supabase');
+  } catch(e) {
+    console.log('Tracking sync failed, using local data');
+  }
+}
+
+// ---- MIGRATE local tracking data to Supabase on first login ----
+async function migrateTrackingToSupabase() {
+  try {
+    const banks = getBanks();
+    const bankEntries = getBankEntries();
+    const cards = getCards();
+    const cardEntries = getCardEntries();
+    const loans = getLoans();
+    const ods = getODs();
+    const odEntries = getODEntries();
+
+    if (banks.length) await pushBanksToSupa(banks);
+    if (bankEntries.length) await pushBankEntriesToSupa(bankEntries);
+    if (cards.length) await pushCardsToSupa(cards);
+    if (cardEntries.length) await pushCardEntriesToSupa(cardEntries);
+    if (loans.length) await pushLoansToSupa(loans);
+    if (ods.length) await pushODsToSupa(ods);
+    if (odEntries.length) await pushODEntriesToSupa(odEntries);
+
+    console.log('Local tracking data migrated to Supabase');
+  } catch(e) {}
 }
 
 // Keyboard: Enter to login
