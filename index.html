@@ -919,7 +919,12 @@
     <div id="page-loans" class="section">
       <div class="page-header"><h2>Loan Tracker</h2><p>Track all running loans — EMI, tenure, outstanding balance</p></div>
       <div class="content">
-
+        <!-- SYNC BAR -->
+        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
+          <span id="loan-sync-status" style="font-size:12px;color:var(--text3);">☁ Not synced yet</span>
+          <button class="btn sm green" onclick="forcePushLoans()">☁ Upload loans to cloud</button>
+          <button class="btn sm blue" onclick="forcePullLoans()">⬇ Download loans from cloud</button>
+        </div>
         <!-- SUMMARY METRICS -->
         <div class="metrics" id="loan-metrics" style="margin-bottom:1.25rem;"></div>
 
@@ -4633,33 +4638,83 @@ async function syncTrackingFromSupabase() {
   }
 }
 
-// ---- MIGRATE: push ALL local data to Supabase (called on login) ----
+// ---- MIGRATE: smart two-way sync on login ----
 async function migrateTrackingToSupabase() {
   if (!currentUser) return;
   try {
-    // Check if Supabase already has data for this user
-    const existing = await sbGet('fintrack_loans', `user_id=eq.${currentUser.id}`);
-    // If Supabase has data, pull it (don't overwrite)
-    if (existing.length > 0) {
-      await syncTrackingFromSupabase();
-      return;
+    // Pull from Supabase first
+    const [remoteLoans, remoteBanks, remoteCards, remoteODs] = await Promise.all([
+      sbGet('fintrack_loans', `user_id=eq.${currentUser.id}`),
+      sbGet('fintrack_banks', `user_id=eq.${currentUser.id}`),
+      sbGet('fintrack_cards', `user_id=eq.${currentUser.id}`),
+      sbGet('fintrack_ods', `user_id=eq.${currentUser.id}`)
+    ]);
+
+    const localLoans = getLoans();
+    const localBanks = getBanks();
+    const localCards = getCards();
+    const localODs = getODs();
+
+    // For each data type: if Supabase has more → pull; if local has more → push
+    // LOANS
+    if (remoteLoans.length >= localLoans.length && remoteLoans.length > 0) {
+      // Pull remote loans
+      localStorage.setItem('fintrack_loans', JSON.stringify(
+        remoteLoans.map(l => ({
+          id:l.id, type:l.type, lender:l.lender,
+          amount:parseFloat(l.amount)||0, outstanding:parseFloat(l.outstanding)||0,
+          emi:parseFloat(l.emi)||0, rate:parseFloat(l.rate)||0,
+          emiDate:l.emi_date, start:l.start_date,
+          tenure:parseInt(l.tenure)||0, paid:parseInt(l.paid)||0,
+          accno:l.accno, coapplicant:l.coapplicant, note:l.note, addedOn:l.added_on
+        }))
+      ));
+    } else if (localLoans.length > 0) {
+      await pushLoansToSupa(localLoans);
     }
-    // Supabase is empty — push local data
-    const loans = getLoans();
-    const banks = getBanks();
-    const bankEntries = getBankEntries();
-    const cards = getCards();
-    const cardEntries = getCardEntries();
-    const ods = getODs();
-    const odEntries = getODEntries();
 
-    if (loans.length) { await pushLoansToSupa(loans); }
-    if (banks.length) { await pushBanksToSupa(banks); await pushBankEntriesToSupa(bankEntries); }
-    if (cards.length) { await pushCardsToSupa(cards); await pushCardEntriesToSupa(cardEntries); }
-    if (ods.length) { await pushODsToSupa(ods); await pushODEntriesToSupa(odEntries); }
+    // BANKS
+    if (remoteBanks.length >= localBanks.length && remoteBanks.length > 0) {
+      localStorage.setItem('fintrack_banks', JSON.stringify(
+        remoteBanks.map(b => ({ id:b.id, name:b.name, type:b.type, openingBalance:parseFloat(b.opening_balance)||0, date:b.date, accno:b.accno, ifsc:b.ifsc }))
+      ));
+      const remoteEntries = await sbGet('fintrack_bank_entries');
+      if (remoteEntries.length) localStorage.setItem('fintrack_bank_entries', JSON.stringify(
+        remoteEntries.map(e => ({ id:e.id, bankId:e.bank_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, mode:e.mode, desc:e.description, ref:e.ref, transferId:e.transfer_id, isTransfer:e.is_transfer, transferTo:e.transfer_to, transferFrom:e.transfer_from, isCardPayment:e.is_card_payment, linkedCardId:e.linked_card_id }))
+      ));
+    } else if (localBanks.length > 0) {
+      await pushBanksToSupa(localBanks);
+      await pushBankEntriesToSupa(getBankEntries());
+    }
 
-    const total = loans.length + banks.length + cards.length + ods.length;
-    if (total > 0) toast(`✓ Migrated ${total} records to cloud`);
+    // CARDS
+    if (remoteCards.length >= localCards.length && remoteCards.length > 0) {
+      localStorage.setItem('fintrack_cards', JSON.stringify(
+        remoteCards.map(c => ({ id:c.id, name:c.name, bank:c.bank, limit:parseFloat(c.credit_limit)||0, dueDate:c.due_date, stmtDate:c.stmt_date, minPayment:parseFloat(c.min_payment)||0, last4:c.last4 }))
+      ));
+      const remoteEntries = await sbGet('fintrack_card_entries');
+      if (remoteEntries.length) localStorage.setItem('fintrack_card_entries', JSON.stringify(
+        remoteEntries.map(e => ({ id:e.id, cardId:e.card_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, cat:e.cat, desc:e.description, ref:e.ref, paymentType:e.payment_type, linkedBankId:e.linked_bank_id, isPayment:e.is_payment }))
+      ));
+    } else if (localCards.length > 0) {
+      await pushCardsToSupa(localCards);
+      await pushCardEntriesToSupa(getCardEntries());
+    }
+
+    // ODs
+    if (remoteODs.length >= localODs.length && remoteODs.length > 0) {
+      localStorage.setItem('fintrack_ods', JSON.stringify(
+        remoteODs.map(o => ({ id:o.id, bank:o.bank, type:o.type, limit:parseFloat(o.od_limit)||0, used:parseFloat(o.used)||0, rate:parseFloat(o.rate)||0, renewal:o.renewal, accno:o.accno, security:o.security, note:o.note, addedOn:o.added_on }))
+      ));
+      const remoteEntries = await sbGet('fintrack_od_entries');
+      if (remoteEntries.length) localStorage.setItem('fintrack_od_entries', JSON.stringify(
+        remoteEntries.map(e => ({ id:e.id, odId:e.od_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, desc:e.description, ref:e.ref }))
+      ));
+    } else if (localODs.length > 0) {
+      await pushODsToSupa(localODs);
+      await pushODEntriesToSupa(getODEntries());
+    }
+
   } catch(e) {}
 }
 
@@ -4677,6 +4732,73 @@ async function forceSyncTracking() {
   await syncTrackingFromSupabase();
   renderLoans(); renderBanks(); renderCards(); renderOverdraft();
   toast('✓ All tracking data synced!');
+}
+
+// ===================== LOAN FORCE SYNC =====================
+async function forcePushLoans() {
+  const loans = getLoans();
+  if (!loans.length) { toast('No loans to upload.'); return; }
+  const el = document.getElementById('loan-sync-status');
+  if (el) el.textContent = '☁ Uploading...';
+  try {
+    // Delete existing loans for this user
+    await fetch(`${SUPA_URL}/rest/v1/fintrack_loans?user_id=eq.${currentUser.id}`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+    // Push each loan one by one
+    let count = 0;
+    for (const l of loans) {
+      const ok = await supaUpsertOne('fintrack_loans', {
+        id: l.id, user_id: currentUser.id,
+        type: l.type, lender: l.lender,
+        amount: l.amount||0, outstanding: l.outstanding||0,
+        emi: l.emi||0, rate: l.rate||0,
+        emi_date: l.emiDate||'', start_date: l.start||'',
+        tenure: l.tenure||0, paid: l.paid||0,
+        accno: l.accno||'', coapplicant: l.coapplicant||'',
+        note: l.note||'', added_on: l.addedOn||''
+      });
+      if (ok) count++;
+    }
+    if (el) el.textContent = `☁ Uploaded ${count} loans ✓`;
+    toast(`✓ ${count} loan(s) uploaded to cloud`);
+  } catch(e) {
+    if (el) el.textContent = '☁ Upload failed';
+    toast('Upload failed. Check connection.');
+  }
+}
+
+async function forcePullLoans() {
+  if (!currentUser) return;
+  const el = document.getElementById('loan-sync-status');
+  if (el) el.textContent = '☁ Downloading...';
+  try {
+    const loans = await sbGet('fintrack_loans', `user_id=eq.${currentUser.id}`);
+    if (!loans.length) {
+      if (el) el.textContent = '☁ No loans found in cloud';
+      toast('No loans found in cloud. Upload from mobile first.');
+      return;
+    }
+    const mapped = loans.map(l => ({
+      id: l.id, type: l.type, lender: l.lender,
+      amount: parseFloat(l.amount)||0,
+      outstanding: parseFloat(l.outstanding)||0,
+      emi: parseFloat(l.emi)||0,
+      rate: parseFloat(l.rate)||0,
+      emiDate: l.emi_date, start: l.start_date,
+      tenure: parseInt(l.tenure)||0,
+      paid: parseInt(l.paid)||0,
+      accno: l.accno, coapplicant: l.coapplicant,
+      note: l.note, addedOn: l.added_on
+    }));
+    localStorage.setItem('fintrack_loans', JSON.stringify(mapped));
+    if (el) el.textContent = `☁ Downloaded ${mapped.length} loans ✓`;
+    renderLoans();
+    toast(`✓ ${mapped.length} loan(s) downloaded from cloud`);
+  } catch(e) {
+    if (el) el.textContent = '☁ Download failed';
+    toast('Download failed. Check connection.');
+  }
 }
 
 // Keyboard: Enter to login
