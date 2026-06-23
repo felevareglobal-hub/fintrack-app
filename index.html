@@ -3549,12 +3549,52 @@ function exportCardStatement() {
   toast('Card statement exported ✓');
 }
 
+// Get next due date for a card (rolling monthly based on due date day)
+function getCardNextDueDate(card) {
+  if (!card.dueDate) return null;
+  const today_str = today();
+  const [y, m, d] = card.dueDate.split('-').map(Number);
+  // Try this month's due date
+  const thisMonth = new Date();
+  const dueDay = d;
+  let dueDate = new Date(thisMonth.getFullYear(), thisMonth.getMonth(), dueDay);
+  // If this month's due date already passed, use next month
+  if (dueDate.toISOString().split('T')[0] < today_str) {
+    dueDate = new Date(thisMonth.getFullYear(), thisMonth.getMonth() + 1, dueDay);
+  }
+  return dueDate.toISOString().split('T')[0];
+}
+
+function updateCardDueDate(cardId) {
+  const newDate = prompt('Enter new due date (YYYY-MM-DD):');
+  if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { toast('Invalid date format.'); return; }
+  const cards = getCards();
+  const card = cards.find(c => c.id === cardId);
+  if (!card) return;
+  card.dueDate = newDate;
+  saveCards(cards);
+  renderCards();
+  toast('Due date updated ✓');
+}
+
 function renderCards() {
   const cards = getCards();
   const today_str = today();
   const totalOut = cards.reduce((a,c)=>a+getCardBalance(c.id),0);
-  const overdue  = cards.filter(c=>c.dueDate<today_str && getCardBalance(c.id)>0);
-  const dueSoon  = cards.filter(c=>c.dueDate>=today_str && daysDiff(today_str,c.dueDate)<=5 && getCardBalance(c.id)>0);
+
+  // Only flag overdue if outstanding > 0 AND next due date has passed
+  const overdue  = cards.filter(c => {
+    const outstanding = getCardBalance(c.id);
+    if (outstanding <= 0) return false; // paid — not overdue
+    const nextDue = getCardNextDueDate(c);
+    return nextDue && nextDue < today_str;
+  });
+  const dueSoon = cards.filter(c => {
+    const outstanding = getCardBalance(c.id);
+    if (outstanding <= 0) return false;
+    const nextDue = getCardNextDueDate(c);
+    return nextDue && nextDue >= today_str && daysDiff(today_str, nextDue) <= 5;
+  });
 
   document.getElementById('card-metrics').innerHTML = `
     <div class="metric"><div class="m-label">Total outstanding</div><div class="m-value m-expense">${fmt(totalOut)}</div></div>
@@ -3564,8 +3604,14 @@ function renderCards() {
   `;
 
   let alerts = '';
-  overdue.forEach(c=>alerts+=`<div style="background:var(--red-light);color:var(--red);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">⚠️ ${c.name} — OVERDUE since ${c.dueDate}! Outstanding: ${fmt(getCardBalance(c.id))}</div>`);
-  dueSoon.forEach(c=>alerts+=`<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${c.name} — Due in ${daysDiff(today_str,c.dueDate)} days (${c.dueDate}). Outstanding: ${fmt(getCardBalance(c.id))}</div>`);
+  overdue.forEach(c => {
+    const nextDue = getCardNextDueDate(c);
+    alerts += `<div style="background:var(--red-light);color:var(--red);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">⚠️ ${c.name} — Payment OVERDUE (due: ${nextDue})! Outstanding: ${fmt(getCardBalance(c.id))}</div>`;
+  });
+  dueSoon.forEach(c => {
+    const nextDue = getCardNextDueDate(c);
+    alerts += `<div style="background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;font-weight:500;">🔔 ${c.name} — Due in ${daysDiff(today_str,nextDue)} days (${nextDue}). Outstanding: ${fmt(getCardBalance(c.id))}</div>`;
+  });
   document.getElementById('card-due-alert').innerHTML = alerts;
 
   if (cards.length) {
@@ -3577,29 +3623,37 @@ function renderCards() {
 
   document.getElementById('card-list').innerHTML = cards.length ? cards.map(c=>{
     const outstanding = getCardBalance(c.id);
-    const days = daysDiff(today_str, c.dueDate);
-    const isOverdue = c.dueDate < today_str;
+    const nextDue = getCardNextDueDate(c);
+    const isPaid = outstanding <= 0;
+    const isOverdue = !isPaid && nextDue && nextDue < today_str;
+    const isDueSoon = !isPaid && nextDue && nextDue >= today_str && daysDiff(today_str,nextDue) <= 5;
+    const days = nextDue ? daysDiff(today_str, nextDue) : null;
     const util = c.limit>0?Math.min(Math.round(outstanding/c.limit*100),100):0;
     const barCol = util>80?'var(--red)':util>50?'var(--amber)':'var(--accent)';
-    return `<div class="card" style="margin-bottom:0.75rem;padding:1rem;">
+    let statusColor = 'var(--text2)';
+    let statusText = nextDue ? `📅 Next due: ${nextDue}${days!==null?' · '+days+' day(s) left':''}` : '📅 No due date set';
+    if (isPaid) { statusColor='var(--accent)'; statusText='✅ Fully paid — no outstanding balance'; }
+    else if (isOverdue) { statusColor='var(--red)'; statusText=`⚠️ OVERDUE — due was ${nextDue}`; }
+    else if (isDueSoon) { statusColor='var(--amber)'; statusText=`🔔 Due in ${days} day(s) — ${nextDue}`; }
+    return `<div class="card" style="margin-bottom:0.75rem;padding:1rem;${isOverdue?'border-color:var(--red);':''}${isPaid?'border-color:var(--accent);opacity:0.85;':''}">
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="font-size:28px;">💳</div>
         <div style="flex:1;">
           <div style="font-weight:700;">${c.name} ${c.last4?'(••••'+c.last4+')':''} ${c.bank?'· '+c.bank:''}</div>
-          <div style="font-size:12px;color:${isOverdue?'var(--red)':'var(--text2)'};">
-            ${isOverdue?'⚠️ OVERDUE since':'📅 Due'} ${c.dueDate}${!isOverdue?' · '+days+' day(s) left':''}
-            ${c.stmtDate?' · Stmt date: '+c.stmtDate:''}
-          </div>
+          <div style="font-size:12px;color:${statusColor};">${statusText}${c.stmtDate?' · Stmt: '+c.stmtDate+'th':''}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:700;color:${outstanding>0?'var(--red)':'var(--accent)'};">${fmt(outstanding)}</div>
-          ${c.minPayment?`<div style="font-size:11px;color:var(--text3);">Min pay: ${fmt(c.minPayment)}</div>`:''}
+          <div style="font-size:18px;font-weight:700;color:${isPaid?'var(--accent)':'var(--red)'};">${isPaid?'₹0 — Paid':fmt(outstanding)}</div>
+          ${c.minPayment&&!isPaid?`<div style="font-size:11px;color:var(--text3);">Min pay: ${fmt(c.minPayment)}</div>`:''}
         </div>
-        <button class="btn red sm" onclick="deleteCard('${c.id}')">✕</button>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="btn sm" onclick="updateCardDueDate('${c.id}')" title="Update due date">📅</button>
+          <button class="btn red sm" onclick="deleteCard('${c.id}')">✕</button>
+        </div>
       </div>
       ${c.limit?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-          <div style="height:100%;width:${util}%;background:${barCol};border-radius:3px;"></div>
+          <div style="height:100%;width:${util}%;background:${isPaid?'var(--accent)':barCol};border-radius:3px;"></div>
         </div>
         <span style="font-size:11px;color:var(--text3);">${util}% of ${fmt(c.limit)} used</span>
       </div>`:''}
@@ -4414,105 +4468,131 @@ function renderOverdraft() {
 
 // ===================== TRACKING DATA — SUPABASE SYNC =====================
 
-// ---- PUSH functions (local → Supabase) ----
-async function pushBanksToSupa(banks) {
+// Generic upsert one item at a time (reliable)
+async function supaUpsertOne(table, row) {
   try {
-    // Delete all existing banks for this user then re-insert
-    await sbDelete('fintrack_banks', 'user_id', currentUser?.id || 'all');
-    if (!banks.length) return;
-    await sbUpsert('fintrack_banks', banks.map(b => ({
-      id: b.id, user_id: currentUser?.id, name: b.name, type: b.type,
-      opening_balance: b.openingBalance || 0, date: b.date,
-      accno: b.accno || '', ifsc: b.ifsc || ''
-    })));
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([row])
+    });
+    return r.ok;
+  } catch(e) { return false; }
+}
+
+// Generic delete all rows for a user
+async function supaDeleteUserRows(table, userId) {
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?user_id=eq.${userId}`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+  } catch(e) {}
+}
+
+// ---- PUSH: local → Supabase ----
+async function pushLoansToSupa(loans) {
+  if (!currentUser) return;
+  try {
+    await supaDeleteUserRows('fintrack_loans', currentUser.id);
+    for (const l of loans) {
+      await supaUpsertOne('fintrack_loans', {
+        id: l.id, user_id: currentUser.id, type: l.type, lender: l.lender,
+        amount: l.amount||0, outstanding: l.outstanding||0,
+        emi: l.emi||0, rate: l.rate||0, emi_date: l.emiDate||'',
+        start_date: l.start||'', tenure: l.tenure||0, paid: l.paid||0,
+        accno: l.accno||'', coapplicant: l.coapplicant||'',
+        note: l.note||'', added_on: l.addedOn||''
+      });
+    }
+  } catch(e) {}
+}
+
+async function pushBanksToSupa(banks) {
+  if (!currentUser) return;
+  try {
+    await supaDeleteUserRows('fintrack_banks', currentUser.id);
+    for (const b of banks) {
+      await supaUpsertOne('fintrack_banks', {
+        id: b.id, user_id: currentUser.id, name: b.name, type: b.type,
+        opening_balance: b.openingBalance||0, date: b.date||'',
+        accno: b.accno||'', ifsc: b.ifsc||''
+      });
+    }
   } catch(e) {}
 }
 
 async function pushBankEntriesToSupa(entries) {
   try {
-    if (!entries.length) return;
-    // Upsert all entries
     for (const e of entries) {
-      await sbUpsert('fintrack_bank_entries', {
+      await supaUpsertOne('fintrack_bank_entries', {
         id: e.id, bank_id: e.bankId, date: e.date, type: e.type,
-        amount: e.amount, mode: e.mode || '', description: e.desc || '',
-        ref: e.ref || '', transfer_id: e.transferId || '',
-        is_transfer: e.isTransfer || false,
-        transfer_to: e.transferTo || '', transfer_from: e.transferFrom || '',
-        is_card_payment: e.isCardPayment || false, linked_card_id: e.linkedCardId || ''
+        amount: e.amount||0, mode: e.mode||'', description: e.desc||'',
+        ref: e.ref||'', transfer_id: e.transferId||'',
+        is_transfer: !!e.isTransfer, transfer_to: e.transferTo||'',
+        transfer_from: e.transferFrom||'', is_card_payment: !!e.isCardPayment,
+        linked_card_id: e.linkedCardId||''
       });
     }
   } catch(e) {}
 }
 
 async function pushCardsToSupa(cards) {
+  if (!currentUser) return;
   try {
-    await sbDelete('fintrack_cards', 'user_id', currentUser?.id || 'all');
-    if (!cards.length) return;
-    await sbUpsert('fintrack_cards', cards.map(c => ({
-      id: c.id, user_id: currentUser?.id, name: c.name, bank: c.bank || '',
-      credit_limit: c.limit || 0, due_date: c.dueDate || '',
-      stmt_date: c.stmtDate || '', min_payment: c.minPayment || 0, last4: c.last4 || ''
-    })));
+    await supaDeleteUserRows('fintrack_cards', currentUser.id);
+    for (const c of cards) {
+      await supaUpsertOne('fintrack_cards', {
+        id: c.id, user_id: currentUser.id, name: c.name, bank: c.bank||'',
+        credit_limit: c.limit||0, due_date: c.dueDate||'',
+        stmt_date: c.stmtDate||'', min_payment: c.minPayment||0, last4: c.last4||''
+      });
+    }
   } catch(e) {}
 }
 
 async function pushCardEntriesToSupa(entries) {
   try {
-    if (!entries.length) return;
     for (const e of entries) {
-      await sbUpsert('fintrack_card_entries', {
+      await supaUpsertOne('fintrack_card_entries', {
         id: e.id, card_id: e.cardId, date: e.date, type: e.type,
-        amount: e.amount, cat: e.cat || '', description: e.desc || '',
-        ref: e.ref || '', payment_type: e.paymentType || '',
-        linked_bank_id: e.linkedBankId || '', is_payment: e.isPayment || false
+        amount: e.amount||0, cat: e.cat||'', description: e.desc||'',
+        ref: e.ref||'', payment_type: e.paymentType||'',
+        linked_bank_id: e.linkedBankId||'', is_payment: !!e.isPayment
       });
     }
   } catch(e) {}
 }
 
-async function pushLoansToSupa(loans) {
-  try {
-    await sbDelete('fintrack_loans', 'user_id', currentUser?.id || 'all');
-    if (!loans.length) return;
-    await sbUpsert('fintrack_loans', loans.map(l => ({
-      id: l.id, user_id: currentUser?.id, type: l.type, lender: l.lender,
-      amount: l.amount, outstanding: l.outstanding, emi: l.emi, rate: l.rate,
-      emi_date: l.emiDate || '', start_date: l.start || '',
-      tenure: l.tenure, paid: l.paid, accno: l.accno || '',
-      coapplicant: l.coapplicant || '', note: l.note || '', added_on: l.addedOn || ''
-    })));
-  } catch(e) {}
-}
-
 async function pushODsToSupa(ods) {
+  if (!currentUser) return;
   try {
-    await sbDelete('fintrack_ods', 'user_id', currentUser?.id || 'all');
-    if (!ods.length) return;
-    await sbUpsert('fintrack_ods', ods.map(o => ({
-      id: o.id, user_id: currentUser?.id, bank: o.bank, type: o.type,
-      od_limit: o.limit, used: o.used || 0, rate: o.rate || 0,
-      renewal: o.renewal || '', accno: o.accno || '',
-      security: o.security || '', note: o.note || '', added_on: o.addedOn || ''
-    })));
+    await supaDeleteUserRows('fintrack_ods', currentUser.id);
+    for (const o of ods) {
+      await supaUpsertOne('fintrack_ods', {
+        id: o.id, user_id: currentUser.id, bank: o.bank, type: o.type,
+        od_limit: o.limit||0, used: o.used||0, rate: o.rate||0,
+        renewal: o.renewal||'', accno: o.accno||'',
+        security: o.security||'', note: o.note||'', added_on: o.addedOn||''
+      });
+    }
   } catch(e) {}
 }
 
 async function pushODEntriesToSupa(entries) {
   try {
-    if (!entries.length) return;
     for (const e of entries) {
-      await sbUpsert('fintrack_od_entries', {
+      await supaUpsertOne('fintrack_od_entries', {
         id: e.id, od_id: e.odId, date: e.date, type: e.type,
-        amount: e.amount, description: e.desc || '', ref: e.ref || ''
+        amount: e.amount||0, description: e.desc||'', ref: e.ref||''
       });
     }
   } catch(e) {}
 }
 
-// ---- PULL functions (Supabase → local) ----
+// ---- PULL: Supabase → local ----
 async function syncTrackingFromSupabase() {
   if (!currentUser) return;
+  showSyncStatus('Syncing tracking...');
   try {
     const uid = currentUser.id;
     const [banks, bankEntries, cards, cardEntries, loans, ods, odEntries] = await Promise.all([
@@ -4525,102 +4605,78 @@ async function syncTrackingFromSupabase() {
       sbGet('fintrack_od_entries')
     ]);
 
-    if (banks.length) {
-      const mappedBanks = banks.map(b => ({
-        id: b.id, name: b.name, type: b.type,
-        openingBalance: parseFloat(b.opening_balance)||0,
-        date: b.date, accno: b.accno, ifsc: b.ifsc
-      }));
-      localStorage.setItem('fintrack_banks', JSON.stringify(mappedBanks));
-    }
+    if (banks.length) localStorage.setItem('fintrack_banks', JSON.stringify(
+      banks.map(b => ({ id:b.id, name:b.name, type:b.type, openingBalance:parseFloat(b.opening_balance)||0, date:b.date, accno:b.accno, ifsc:b.ifsc }))
+    ));
+    if (bankEntries.length) localStorage.setItem('fintrack_bank_entries', JSON.stringify(
+      bankEntries.map(e => ({ id:e.id, bankId:e.bank_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, mode:e.mode, desc:e.description, ref:e.ref, transferId:e.transfer_id, isTransfer:e.is_transfer, transferTo:e.transfer_to, transferFrom:e.transfer_from, isCardPayment:e.is_card_payment, linkedCardId:e.linked_card_id }))
+    ));
+    if (cards.length) localStorage.setItem('fintrack_cards', JSON.stringify(
+      cards.map(c => ({ id:c.id, name:c.name, bank:c.bank, limit:parseFloat(c.credit_limit)||0, dueDate:c.due_date, stmtDate:c.stmt_date, minPayment:parseFloat(c.min_payment)||0, last4:c.last4 }))
+    ));
+    if (cardEntries.length) localStorage.setItem('fintrack_card_entries', JSON.stringify(
+      cardEntries.map(e => ({ id:e.id, cardId:e.card_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, cat:e.cat, desc:e.description, ref:e.ref, paymentType:e.payment_type, linkedBankId:e.linked_bank_id, isPayment:e.is_payment }))
+    ));
+    if (loans.length) localStorage.setItem('fintrack_loans', JSON.stringify(
+      loans.map(l => ({ id:l.id, type:l.type, lender:l.lender, amount:parseFloat(l.amount)||0, outstanding:parseFloat(l.outstanding)||0, emi:parseFloat(l.emi)||0, rate:parseFloat(l.rate)||0, emiDate:l.emi_date, start:l.start_date, tenure:parseInt(l.tenure)||0, paid:parseInt(l.paid)||0, accno:l.accno, coapplicant:l.coapplicant, note:l.note, addedOn:l.added_on }))
+    ));
+    if (ods.length) localStorage.setItem('fintrack_ods', JSON.stringify(
+      ods.map(o => ({ id:o.id, bank:o.bank, type:o.type, limit:parseFloat(o.od_limit)||0, used:parseFloat(o.used)||0, rate:parseFloat(o.rate)||0, renewal:o.renewal, accno:o.accno, security:o.security, note:o.note, addedOn:o.added_on }))
+    ));
+    if (odEntries.length) localStorage.setItem('fintrack_od_entries', JSON.stringify(
+      odEntries.map(e => ({ id:e.id, odId:e.od_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, desc:e.description, ref:e.ref }))
+    ));
 
-    if (bankEntries.length) {
-      const mappedBE = bankEntries.map(e => ({
-        id: e.id, bankId: e.bank_id, date: e.date, type: e.type,
-        amount: parseFloat(e.amount)||0, mode: e.mode, desc: e.description,
-        ref: e.ref, transferId: e.transfer_id, isTransfer: e.is_transfer,
-        transferTo: e.transfer_to, transferFrom: e.transfer_from,
-        isCardPayment: e.is_card_payment, linkedCardId: e.linked_card_id
-      }));
-      localStorage.setItem('fintrack_bank_entries', JSON.stringify(mappedBE));
-    }
-
-    if (cards.length) {
-      const mappedCards = cards.map(c => ({
-        id: c.id, name: c.name, bank: c.bank,
-        limit: parseFloat(c.credit_limit)||0, dueDate: c.due_date,
-        stmtDate: c.stmt_date, minPayment: parseFloat(c.min_payment)||0, last4: c.last4
-      }));
-      localStorage.setItem('fintrack_cards', JSON.stringify(mappedCards));
-    }
-
-    if (cardEntries.length) {
-      const mappedCE = cardEntries.map(e => ({
-        id: e.id, cardId: e.card_id, date: e.date, type: e.type,
-        amount: parseFloat(e.amount)||0, cat: e.cat, desc: e.description,
-        ref: e.ref, paymentType: e.payment_type, linkedBankId: e.linked_bank_id,
-        isPayment: e.is_payment
-      }));
-      localStorage.setItem('fintrack_card_entries', JSON.stringify(mappedCE));
-    }
-
-    if (loans.length) {
-      const mappedLoans = loans.map(l => ({
-        id: l.id, type: l.type, lender: l.lender,
-        amount: parseFloat(l.amount)||0, outstanding: parseFloat(l.outstanding)||0,
-        emi: parseFloat(l.emi)||0, rate: parseFloat(l.rate)||0,
-        emiDate: l.emi_date, start: l.start_date,
-        tenure: parseInt(l.tenure)||0, paid: parseInt(l.paid)||0,
-        accno: l.accno, coapplicant: l.coapplicant, note: l.note, addedOn: l.added_on
-      }));
-      localStorage.setItem('fintrack_loans', JSON.stringify(mappedLoans));
-    }
-
-    if (ods.length) {
-      const mappedODs = ods.map(o => ({
-        id: o.id, bank: o.bank, type: o.type,
-        limit: parseFloat(o.od_limit)||0, used: parseFloat(o.used)||0,
-        rate: parseFloat(o.rate)||0, renewal: o.renewal,
-        accno: o.accno, security: o.security, note: o.note, addedOn: o.added_on
-      }));
-      localStorage.setItem('fintrack_ods', JSON.stringify(mappedODs));
-    }
-
-    if (odEntries.length) {
-      const mappedODE = odEntries.map(e => ({
-        id: e.id, odId: e.od_id, date: e.date, type: e.type,
-        amount: parseFloat(e.amount)||0, desc: e.description, ref: e.ref
-      }));
-      localStorage.setItem('fintrack_od_entries', JSON.stringify(mappedODE));
-    }
-
-    console.log('Tracking data synced from Supabase');
+    showSyncStatus('Synced ✓', true);
   } catch(e) {
-    console.log('Tracking sync failed, using local data');
+    showSyncStatus('Using local data', false, true);
   }
 }
 
-// ---- MIGRATE local tracking data to Supabase on first login ----
+// ---- MIGRATE: push ALL local data to Supabase (called on login) ----
 async function migrateTrackingToSupabase() {
+  if (!currentUser) return;
   try {
+    // Check if Supabase already has data for this user
+    const existing = await sbGet('fintrack_loans', `user_id=eq.${currentUser.id}`);
+    // If Supabase has data, pull it (don't overwrite)
+    if (existing.length > 0) {
+      await syncTrackingFromSupabase();
+      return;
+    }
+    // Supabase is empty — push local data
+    const loans = getLoans();
     const banks = getBanks();
     const bankEntries = getBankEntries();
     const cards = getCards();
     const cardEntries = getCardEntries();
-    const loans = getLoans();
     const ods = getODs();
     const odEntries = getODEntries();
 
-    if (banks.length) await pushBanksToSupa(banks);
-    if (bankEntries.length) await pushBankEntriesToSupa(bankEntries);
-    if (cards.length) await pushCardsToSupa(cards);
-    if (cardEntries.length) await pushCardEntriesToSupa(cardEntries);
-    if (loans.length) await pushLoansToSupa(loans);
-    if (ods.length) await pushODsToSupa(ods);
-    if (odEntries.length) await pushODEntriesToSupa(odEntries);
+    if (loans.length) { await pushLoansToSupa(loans); }
+    if (banks.length) { await pushBanksToSupa(banks); await pushBankEntriesToSupa(bankEntries); }
+    if (cards.length) { await pushCardsToSupa(cards); await pushCardEntriesToSupa(cardEntries); }
+    if (ods.length) { await pushODsToSupa(ods); await pushODEntriesToSupa(odEntries); }
 
-    console.log('Local tracking data migrated to Supabase');
+    const total = loans.length + banks.length + cards.length + ods.length;
+    if (total > 0) toast(`✓ Migrated ${total} records to cloud`);
   } catch(e) {}
+}
+
+// Force sync button — for manual troubleshooting
+async function forceSyncTracking() {
+  toast('Syncing all data...');
+  // Push local to Supabase first, then pull back
+  await pushLoansToSupa(getLoans());
+  await pushBanksToSupa(getBanks());
+  await pushBankEntriesToSupa(getBankEntries());
+  await pushCardsToSupa(getCards());
+  await pushCardEntriesToSupa(getCardEntries());
+  await pushODsToSupa(getODs());
+  await pushODEntriesToSupa(getODEntries());
+  await syncTrackingFromSupabase();
+  renderLoans(); renderBanks(); renderCards(); renderOverdraft();
+  toast('✓ All tracking data synced!');
 }
 
 // Keyboard: Enter to login
