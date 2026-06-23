@@ -444,7 +444,42 @@
             <button class="type-tab" onclick="setType('Investment')">📈 Investment</button>
             <button class="type-tab" onclick="setType('Savings')">🏦 Savings</button>
             <button class="type-tab" onclick="setType('Donation')">🤲 Donation</button>
+            <button class="type-tab" onclick="setType('Transfer')" style="background:var(--purple-light);color:var(--purple);border-color:#C4B5FD;">⇄ Transfer</button>
           </div>
+
+          <!-- TRANSFER FORM — shown only when Transfer tab is selected -->
+          <div id="transfer-form" style="display:none;">
+            <div style="background:var(--purple-light);border:1.5px solid #C4B5FD;border-radius:var(--radius-sm);padding:14px;margin-bottom:1rem;">
+              <div style="font-size:13px;font-weight:700;color:var(--purple);margin-bottom:12px;">⇄ Transfer between bank accounts</div>
+              <div class="form-row c4">
+                <div class="fl"><label>Date</label><input type="date" id="tf2-date"></div>
+                <div class="fl"><label>From bank</label><select id="tf2-from" onchange="updateTransferPreview()"></select></div>
+                <div class="fl"><label>To bank</label><select id="tf2-to" onchange="updateTransferPreview()"></select></div>
+                <div class="fl">
+                  <label>Amount (₹)</label>
+                  <input type="number" id="tf2-amt" placeholder="0" min="0" oninput="updateTransferPreview()">
+                </div>
+              </div>
+              <div class="form-row c3">
+                <div class="fl"><label>Mode</label>
+                  <select id="tf2-mode">
+                    <option>NEFT</option><option>RTGS</option><option>IMPS</option>
+                    <option>UPI</option><option>Cheque</option><option>Cash</option>
+                  </select>
+                </div>
+                <div class="fl"><label>Reference / UTR</label><input type="text" id="tf2-ref" placeholder="Transaction reference"></div>
+                <div class="fl"><label>Note</label><input type="text" id="tf2-note" placeholder="Optional note"></div>
+              </div>
+              <!-- Live preview -->
+              <div id="tf2-preview" style="display:none;background:white;border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;border:1px solid #C4B5FD;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;" id="tf2-preview-grid"></div>
+              </div>
+              <button class="btn" style="background:var(--purple);color:white;border-color:var(--purple);" onclick="saveQuickTransfer()">✓ Save transfer</button>
+            </div>
+          </div>
+
+          <!-- NORMAL TRANSACTION FORM — hidden when Transfer is selected -->
+          <div id="normal-txn-form">
           <div class="form-row c3">
             <div class="fl"><label>Date</label><input type="date" id="t-date"></div>
             <div class="fl"><label>Category</label><select id="t-cat" onchange="updateSub()"></select></div>
@@ -538,6 +573,7 @@
             <div class="fl"><label>Tags</label><input type="text" id="t-tags" placeholder="e.g. work, family, tax"></div>
           </div>
           <button class="btn green" onclick="saveTransaction()">✓ Save transaction</button>
+          </div><!-- end normal-txn-form -->
         </div>
       </div>
     </div>
@@ -1726,9 +1762,104 @@ function setType(t) {
   currentType = t;
   document.querySelectorAll('.type-tab').forEach(b => {
     b.className = 'type-tab';
-    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'"+t+"'")) b.className = 'type-tab active-' + t;
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'"+t+"'")) {
+      b.className = t === 'Transfer' ? 'type-tab active-Transfer' : 'type-tab active-' + t;
+    }
   });
-  populateCats();
+
+  const isTransfer = t === 'Transfer';
+  const transferForm = document.getElementById('transfer-form');
+  const normalForm   = document.getElementById('normal-txn-form');
+  if (transferForm) transferForm.style.display = isTransfer ? 'block' : 'none';
+  if (normalForm)   normalForm.style.display   = isTransfer ? 'none'  : 'block';
+
+  if (isTransfer) {
+    // Populate bank dropdowns
+    const banks = getBanks();
+    const opts = banks.map(b => `<option value="${b.id}">${b.name} (${fmt(getBankBalance(b.id))})</option>`).join('');
+    document.getElementById('tf2-from').innerHTML = opts || '<option value="">No banks added yet</option>';
+    document.getElementById('tf2-to').innerHTML   = opts || '<option value="">No banks added yet</option>';
+    if (banks.length >= 2) document.getElementById('tf2-to').selectedIndex = 1;
+    document.getElementById('tf2-date').value = today();
+    updateTransferPreview();
+  } else {
+    populateCats();
+  }
+}
+
+// Add Transfer active style
+const styleEl = document.createElement('style');
+styleEl.textContent = '.type-tab.active-Transfer { background: var(--purple-light); color: var(--purple); border-color: #C4B5FD; }';
+document.head.appendChild(styleEl);
+
+function updateTransferPreview() {
+  const fromId = document.getElementById('tf2-from').value;
+  const toId   = document.getElementById('tf2-to').value;
+  const amt    = parseFloat(document.getElementById('tf2-amt').value) || 0;
+  const preview = document.getElementById('tf2-preview');
+  if (!fromId || !toId || !amt) { preview.style.display = 'none'; return; }
+
+  const banks = getBanks();
+  const fromBank = banks.find(b => b.id === fromId);
+  const toBank   = banks.find(b => b.id === toId);
+  const fromBal  = getBankBalance(fromId);
+  const toBal    = getBankBalance(toId);
+
+  preview.style.display = 'block';
+  document.getElementById('tf2-preview-grid').innerHTML = `
+    <div><div style="font-size:11px;color:var(--text3);">${fromBank?.name||'From'} (before)</div><div style="font-size:14px;font-weight:700;">${fmt(fromBal)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">${fromBank?.name||'From'} (after)</div><div style="font-size:14px;font-weight:700;color:${fromBal-amt<0?'var(--red)':'var(--accent)'};">${fmt(fromBal-amt)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">${toBank?.name||'To'} (before)</div><div style="font-size:14px;font-weight:700;">${fmt(toBal)}</div></div>
+    <div><div style="font-size:11px;color:var(--text3);">${toBank?.name||'To'} (after)</div><div style="font-size:14px;font-weight:700;color:var(--accent);">${fmt(toBal+amt)}</div></div>
+    ${fromBal-amt<0?'<div style="color:var(--red);font-size:12px;font-weight:600;">⚠️ Insufficient balance in '+fromBank?.name+'</div>':''}
+  `;
+}
+
+async function saveQuickTransfer() {
+  const fromId = document.getElementById('tf2-from').value;
+  const toId   = document.getElementById('tf2-to').value;
+  const date   = document.getElementById('tf2-date').value || today();
+  const amt    = parseFloat(document.getElementById('tf2-amt').value) || 0;
+  const mode   = document.getElementById('tf2-mode').value;
+  const ref    = document.getElementById('tf2-ref').value.trim();
+  const note   = document.getElementById('tf2-note').value.trim();
+
+  if (!fromId || !toId) { toast('Select both banks.'); return; }
+  if (fromId === toId) { toast('From and To bank cannot be the same.'); return; }
+  if (!amt || amt <= 0) { toast('Enter a valid amount.'); return; }
+
+  const banks    = getBanks();
+  const fromBank = banks.find(b => b.id === fromId);
+  const toBank   = banks.find(b => b.id === toId);
+  const fromBal  = getBankBalance(fromId);
+
+  if (fromBal < amt && !confirm(`⚠️ ${fromBank?.name} has only ${fmt(fromBal)}. Proceed?`)) return;
+
+  const transferId = 'TRF_' + Date.now().toString();
+  const desc = note || `Transfer to ${toBank?.name}`;
+  const entries = getBankEntries();
+
+  entries.push({
+    id: transferId + '_DR', bankId: fromId, date, type: 'Debit', amount: amt,
+    mode, desc, ref: ref || transferId,
+    transferId, isTransfer: true, transferTo: toId
+  });
+  entries.push({
+    id: transferId + '_CR', bankId: toId, date, type: 'Credit', amount: amt,
+    mode, desc: note || `Transfer from ${fromBank?.name}`,
+    ref: ref || transferId,
+    transferId, isTransfer: true, transferFrom: fromId
+  });
+
+  saveBankEntries(entries);
+
+  // Clear form
+  document.getElementById('tf2-amt').value = '';
+  document.getElementById('tf2-ref').value = '';
+  document.getElementById('tf2-note').value = '';
+  document.getElementById('tf2-preview').style.display = 'none';
+
+  toast(`✓ ${fmt(amt)} transferred: ${fromBank?.name} → ${toBank?.name}`);
 }
 
 document.getElementById('t-recur').addEventListener('change', function() {
