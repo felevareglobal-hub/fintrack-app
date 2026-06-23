@@ -178,6 +178,7 @@
   .type-tab.active-Investment { background: var(--blue-light); color: var(--blue); border-color: #93C5FD; }
   .type-tab.active-Savings { background: var(--purple-light); color: var(--purple); border-color: #C4B5FD; }
   .type-tab.active-Donation { background: var(--amber-light); color: var(--amber); border-color: #FCD34D; }
+  .type-tab.active-Transfer { background: var(--purple-light); color: var(--purple); border-color: #C4B5FD; font-weight: 700; }
 
   /* TABLE */
   .tbl-wrap { overflow-x: auto; }
@@ -444,7 +445,7 @@
             <button class="type-tab" onclick="setType('Investment')">📈 Investment</button>
             <button class="type-tab" onclick="setType('Savings')">🏦 Savings</button>
             <button class="type-tab" onclick="setType('Donation')">🤲 Donation</button>
-            <button class="type-tab" onclick="setType('Transfer')" style="background:var(--purple-light);color:var(--purple);border-color:#C4B5FD;">⇄ Transfer</button>
+            <button class="type-tab" onclick="setType('Transfer')">⇄ Transfer</button>
           </div>
 
           <!-- TRANSFER FORM — shown only when Transfer tab is selected -->
@@ -1767,30 +1768,34 @@ function setType(t) {
     }
   });
 
-  const isTransfer = t === 'Transfer';
+  const isTransfer = (t === 'Transfer');
   const transferForm = document.getElementById('transfer-form');
   const normalForm   = document.getElementById('normal-txn-form');
-  if (transferForm) transferForm.style.display = isTransfer ? 'block' : 'none';
-  if (normalForm)   normalForm.style.display   = isTransfer ? 'none'  : 'block';
+
+  if (transferForm) {
+    transferForm.style.display = isTransfer ? 'block' : 'none';
+  }
+  if (normalForm) {
+    normalForm.style.display = isTransfer ? 'none' : 'block';
+  }
 
   if (isTransfer) {
-    // Populate bank dropdowns
     const banks = getBanks();
-    const opts = banks.map(b => `<option value="${b.id}">${b.name} (${fmt(getBankBalance(b.id))})</option>`).join('');
-    document.getElementById('tf2-from').innerHTML = opts || '<option value="">No banks added yet</option>';
-    document.getElementById('tf2-to').innerHTML   = opts || '<option value="">No banks added yet</option>';
-    if (banks.length >= 2) document.getElementById('tf2-to').selectedIndex = 1;
+    if (!banks.length) {
+      document.getElementById('tf2-from').innerHTML = '<option value="">No banks added yet — add in Bank Balances first</option>';
+      document.getElementById('tf2-to').innerHTML = '<option value="">No banks added yet</option>';
+    } else {
+      const opts = banks.map(b => `<option value="${b.id}">${b.name} (${fmt(getBankBalance(b.id))})</option>`).join('');
+      document.getElementById('tf2-from').innerHTML = opts;
+      document.getElementById('tf2-to').innerHTML = opts;
+      if (banks.length >= 2) document.getElementById('tf2-to').selectedIndex = 1;
+    }
     document.getElementById('tf2-date').value = today();
     updateTransferPreview();
   } else {
     populateCats();
   }
 }
-
-// Add Transfer active style
-const styleEl = document.createElement('style');
-styleEl.textContent = '.type-tab.active-Transfer { background: var(--purple-light); color: var(--purple); border-color: #C4B5FD; }';
-document.head.appendChild(styleEl);
 
 function updateTransferPreview() {
   const fromId = document.getElementById('tf2-from').value;
