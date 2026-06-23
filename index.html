@@ -451,11 +451,22 @@
             <div class="fl"><label>Sub-category</label><select id="t-sub"></select></div>
           </div>
           <div class="form-row c4">
-            <div class="fl"><label>Amount</label><input type="number" id="t-amt" placeholder="0" min="0" step="0.01"></div>
+            <div class="fl">
+              <label>Amount</label>
+              <input type="number" id="t-amt" placeholder="0" min="0" step="0.01" oninput="updateBalancePreview()">
+              <div id="t-balance-preview" style="display:none;font-size:11px;margin-top:4px;padding:4px 8px;border-radius:4px;"></div>
+            </div>
             <div class="fl"><label>Payment mode</label>
-              <select id="t-mode">
+              <select id="t-mode" onchange="updatePaymentAccount()">
                 <option>Cash</option><option>UPI</option><option>Bank Transfer</option>
                 <option>Credit Card</option><option>Debit Card</option><option>Cheque</option>
+                <option>Net Banking</option><option>Auto Debit</option>
+              </select>
+            </div>
+            <div class="fl" id="t-account-wrap" style="display:none;">
+              <label id="t-account-label">Bank account</label>
+              <select id="t-account">
+                <option value="">-- Select --</option>
               </select>
             </div>
             <div class="fl"><label>Recurring?</label>
@@ -1774,6 +1785,38 @@ function saveTransaction(txnData) {
   saveDB();
   pushTransactionToSupa(t);
   if (!txnData) {
+    // Auto-update bank / credit card balance
+    const mode    = document.getElementById('t-mode').value;
+    const accountId = document.getElementById('t-account').value;
+    if (accountId && t.amount > 0) {
+      if (mode === 'Credit Card') {
+        // Debit credit card (increase outstanding)
+        const cardEntries = getCardEntries();
+        cardEntries.push({
+          id: 'TXN_CC_' + t.id, cardId: accountId, date: t.date,
+          type: 'Debit', amount: t.amount,
+          cat: t.cat || 'Purchase',
+          desc: (t.cat || '') + (t.sub ? ' — ' + t.sub : '') + (t.note ? ' (' + t.note + ')' : ''),
+          ref: 'TXN_' + t.id, linkedTxnId: t.id
+        });
+        saveCardEntries(cardEntries);
+        toast('Transaction saved ✓ · Card outstanding updated');
+      } else {
+        // Debit bank account (UPI, Debit Card, Bank Transfer etc.)
+        const bankEntries = getBankEntries();
+        bankEntries.push({
+          id: 'TXN_BK_' + t.id, bankId: accountId, date: t.date,
+          type: t.type === 'Income' ? 'Credit' : 'Debit',
+          amount: t.amount,
+          mode, desc: (t.cat || '') + (t.sub ? ' — ' + t.sub : '') + (t.note ? ' (' + t.note + ')' : ''),
+          ref: 'TXN_' + t.id, linkedTxnId: t.id
+        });
+        saveBankEntries(bankEntries);
+        toast('Transaction saved ✓ · Bank balance updated');
+      }
+    } else {
+      toast('Transaction saved ✓');
+    }
     document.getElementById('t-amt').value = '';
     document.getElementById('t-note').value = '';
     document.getElementById('t-tags').value = '';
@@ -1781,8 +1824,10 @@ function saveTransaction(txnData) {
     document.getElementById('rec-end-wrap').style.display = 'none';
     document.getElementById('t-gst-toggle').checked = false;
     document.getElementById('t-gst-no').value = '';
+    document.getElementById('t-account-wrap').style.display = 'none';
+    document.getElementById('t-account').value = '';
+    document.getElementById('t-balance-preview').style.display = 'none';
     toggleGST(false);
-    toast('Transaction saved ✓');
   }
 }
 
@@ -4800,6 +4845,76 @@ async function forcePullLoans() {
     toast('Download failed. Check connection.');
   }
 }
+
+// ===================== PAYMENT ACCOUNT SELECTOR =====================
+function updatePaymentAccount() {
+  const mode = document.getElementById('t-mode').value;
+  const wrap  = document.getElementById('t-account-wrap');
+  const label = document.getElementById('t-account-label');
+  const sel   = document.getElementById('t-account');
+
+  const bankModes = ['UPI','Debit Card','Bank Transfer','Net Banking','Cheque','Auto Debit'];
+  const cardModes = ['Credit Card'];
+
+  if (bankModes.includes(mode)) {
+    wrap.style.display = 'flex';
+    label.textContent = 'Bank account';
+    const banks = getBanks();
+    sel.innerHTML = '<option value="">-- Select bank --</option>' +
+      banks.map(b => `<option value="${b.id}">${b.name} (${fmt(getBankBalance(b.id))})</option>`).join('');
+    updateBalancePreview();
+  } else if (cardModes.includes(mode)) {
+    wrap.style.display = 'flex';
+    label.textContent = 'Credit card';
+    const cards = getCards();
+    sel.innerHTML = '<option value="">-- Select card --</option>' +
+      cards.map(c => `<option value="${c.id}">${c.name}${c.last4?' (••••'+c.last4+')':''} — Outstanding: ${fmt(getCardBalance(c.id))}</option>`).join('');
+    updateBalancePreview();
+  } else {
+    wrap.style.display = 'none';
+    sel.value = '';
+    document.getElementById('t-balance-preview').style.display = 'none';
+  }
+}
+
+function updateBalancePreview() {
+  const mode      = document.getElementById('t-mode').value;
+  const accountId = document.getElementById('t-account').value;
+  const amt       = parseFloat(document.getElementById('t-amt').value) || 0;
+  const preview   = document.getElementById('t-balance-preview');
+
+  if (!accountId || !amt) { preview.style.display = 'none'; return; }
+
+  const bankModes = ['UPI','Debit Card','Bank Transfer','Net Banking','Cheque','Auto Debit'];
+
+  if (bankModes.includes(mode)) {
+    const bal = getBankBalance(accountId);
+    const after = bal - amt;
+    const banks = getBanks();
+    const bank = banks.find(b => b.id === accountId);
+    preview.style.display = 'block';
+    preview.style.background = after < 0 ? 'var(--red-light)' : 'var(--accent-light)';
+    preview.style.color = after < 0 ? 'var(--red)' : 'var(--accent-dark)';
+    preview.innerHTML = `${bank?.name||'Bank'}: ${fmt(bal)} → <strong>${fmt(after)}</strong> after this transaction${after < 0 ? ' ⚠️ Insufficient balance!' : ''}`;
+  } else if (mode === 'Credit Card') {
+    const outstanding = getCardBalance(accountId);
+    const cards = getCards();
+    const card = cards.find(c => c.id === accountId);
+    const limit = card?.limit || 0;
+    const newOutstanding = outstanding + amt;
+    const available = limit - newOutstanding;
+    preview.style.display = 'block';
+    preview.style.background = available < 0 ? 'var(--red-light)' : 'var(--amber-light)';
+    preview.style.color = available < 0 ? 'var(--red)' : 'var(--amber)';
+    preview.innerHTML = `${card?.name||'Card'} outstanding: ${fmt(outstanding)} → <strong>${fmt(newOutstanding)}</strong>${limit?' · Available limit: '+fmt(available):''}${available < 0 ? ' ⚠️ Over limit!' : ''}`;
+  }
+}
+
+// Also update account selector when account changes
+document.addEventListener('DOMContentLoaded', () => {
+  const accSel = document.getElementById('t-account');
+  if (accSel) accSel.addEventListener('change', updateBalancePreview);
+});
 
 // Keyboard: Enter to login
 document.getElementById('l-pin').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
