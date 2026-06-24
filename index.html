@@ -745,7 +745,7 @@
 
     <!-- BANK BALANCES -->
     <div id="page-banks" class="section">
-      <div class="page-header"><h2>Bank Balances</h2><p>Full ledger — auto-syncs with UPI/Debit Card transactions</p></div>
+      <div class="page-header"><h2>Bank Balances</h2><p>Full ledger — balances update automatically when you add transactions</p></div>
       <div class="content">
         <div class="metrics" id="bank-metrics"></div>
 
@@ -3579,51 +3579,9 @@ function renderBanks() {
     });
   }
 
-  // Auto-sync: transactions paid via UPI/Debit Card
-  syncTransactionsToBanks();
 }
 
-function syncTransactionsToBanks() {
-  // For each bank, check recent FinTrack transactions paid via UPI or Debit Card
-  // and show a sync indicator (doesn't auto-add — user confirms)
-  const banks = getBanks();
-  if (!banks.length) return;
-  const bankEntryIds = new Set(getBankEntries().map(e => e.ref));
-  const unsynced = DB.transactions.filter(t =>
-    (t.mode === 'UPI' || t.mode === 'Debit Card') &&
-    t.type === 'Expenses' &&
-    !bankEntryIds.has('TXN_' + t.id)
-  );
-  if (unsynced.length > 0) {
-    const existing = document.getElementById('bank-sync-alert');
-    const el = existing || document.createElement('div');
-    el.id = 'bank-sync-alert';
-    el.style.cssText = 'background:var(--amber-light);color:var(--amber);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:1rem;font-size:13px;font-weight:500;';
-    el.innerHTML = `🔄 ${unsynced.length} UPI/Debit Card transaction(s) not yet recorded in bank ledger. <button class="btn sm" style="margin-left:8px;" onclick="autoSyncTxnsToBanks()">Auto-add to ledger</button>`;
-    if (!existing) document.getElementById('bank-list').before(el);
-  }
-}
 
-function autoSyncTxnsToBanks() {
-  const banks = getBanks();
-  if (!banks.length) { toast('Add a bank account first.'); return; }
-  if (banks.length > 1) { toast('Multiple banks found. Please add UPI/Debit entries manually to the correct bank.'); return; }
-  const bankId = banks[0].id;
-  const bankEntryRefs = new Set(getBankEntries().map(e => e.ref));
-  const unsynced = DB.transactions.filter(t =>
-    (t.mode === 'UPI' || t.mode === 'Debit Card') &&
-    t.type === 'Expenses' &&
-    !bankEntryRefs.has('TXN_' + t.id)
-  );
-  const entries = getBankEntries();
-  unsynced.forEach(t => {
-    entries.push({ id: Date.now().toString() + Math.random(), bankId, date: t.date, type: 'Debit', amount: t.amount, mode: t.mode, desc: t.cat + (t.sub?' - '+t.sub:'') + (t.note?' ('+t.note+')':''), ref: 'TXN_' + t.id });
-  });
-  saveBankEntries(entries);
-  document.getElementById('bank-sync-alert')?.remove();
-  renderBanks(); renderBankLedger();
-  toast(`✓ ${unsynced.length} transactions synced to ${banks[0].name}`);
-}
 
 // ===================== CREDIT CARD FULL LEDGER =====================
 function getCards() { return JSON.parse(localStorage.getItem('fintrack_cards') || '[]'); }
