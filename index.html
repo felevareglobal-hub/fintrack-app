@@ -4919,71 +4919,82 @@ async function pushLoansToSupa(loans) {
 async function pushBanksToSupa(banks) {
   if (!currentUser) return;
   try {
-    await supaDeleteUserRows('fintrack_banks', currentUser.id);
-    for (const b of banks) {
-      await supaUpsertOne('fintrack_banks', {
-        id: b.id, user_id: currentUser.id, name: b.name, type: b.type,
-        opening_balance: b.openingBalance||0, date: b.date||'',
-        accno: b.accno||'', ifsc: b.ifsc||''
-      });
-    }
-  } catch(e) {}
+    const rows = banks.map(b => ({
+      id: b.id, user_id: currentUser.id, name: b.name, type: b.type,
+      opening_balance: b.openingBalance||0, date: b.date||'',
+      accno: b.accno||'', ifsc: b.ifsc||''
+    }));
+    if (!rows.length) return;
+    const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_banks`, {
+      method: 'POST',
+      headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) console.log('pushBanksToSupa error:', await r.text());
+  } catch(e) { console.log('pushBanksToSupa exception:', e); }
 }
 
 async function pushBankEntriesToSupa(entries) {
+  if (!entries.length) return;
   try {
-    for (const e of entries) {
-      await supaUpsertOne('fintrack_bank_entries', {
+    // Push in batches of 20
+    for (let i = 0; i < entries.length; i += 20) {
+      const batch = entries.slice(i, i+20).map(e => ({
         id: e.id, bank_id: e.bankId, date: e.date, type: e.type,
         amount: e.amount||0, mode: e.mode||'', description: e.desc||'',
         ref: e.ref||'', transfer_id: e.transferId||'',
         is_transfer: !!e.isTransfer, transfer_to: e.transferTo||'',
         transfer_from: e.transferFrom||'', is_card_payment: !!e.isCardPayment,
         linked_card_id: e.linkedCardId||''
+      }));
+      const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_bank_entries`, {
+        method: 'POST',
+        headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(batch)
       });
+      if (!r.ok) console.log('pushBankEntriesToSupa error:', await r.text());
     }
-  } catch(e) {}
+  } catch(e) { console.log('pushBankEntriesToSupa exception:', e); }
 }
 
 async function pushCardsToSupa(cards) {
   if (!currentUser) return;
   try {
-    // Delete all existing card records for this user
-    await fetch(`${SUPA_URL}/rest/v1/fintrack_cards?user_id=eq.${currentUser.id}`, {
-      method: 'DELETE', headers: SUPA_HEADERS
+    const rows = cards.map(c => ({
+      id: c.id, user_id: currentUser.id, name: c.name, bank: c.bank||'',
+      credit_limit: c.limit||0, due_date: c.dueDate||'',
+      stmt_date: c.stmtDate||'', min_payment: c.minPayment||0, last4: c.last4||''
+    }));
+    if (!rows.length) return;
+    const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_cards`, {
+      method: 'POST',
+      headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows)
     });
-    // Also clear orphaned records
-    await fetch(`${SUPA_URL}/rest/v1/fintrack_cards?user_id=is.null`, {
-      method: 'DELETE', headers: SUPA_HEADERS
-    });
-    // Re-insert all cards
-    for (const c of cards) {
-      await supaUpsertOne('fintrack_cards', {
-        id: c.id, user_id: currentUser.id, name: c.name, bank: c.bank||'',
-        credit_limit: c.limit||0, due_date: c.dueDate||'',
-        stmt_date: c.stmtDate||'', min_payment: c.minPayment||0, last4: c.last4||''
-      });
-    }
-    console.log('Pushed', cards.length, 'cards to Supabase');
-  } catch(e) { console.log('pushCardsToSupa error:', e); }
+    if (!r.ok) console.log('pushCardsToSupa error:', await r.text());
+    else console.log('✓ Pushed', cards.length, 'cards');
+  } catch(e) { console.log('pushCardsToSupa exception:', e); }
 }
 
 async function pushCardEntriesToSupa(entries) {
+  if (!entries.length) return;
   try {
-    // Clear all existing card entries then re-insert
-    await fetch(`${SUPA_URL}/rest/v1/fintrack_card_entries?id=neq.NONE_PLACEHOLDER`, {
-      method: 'DELETE', headers: SUPA_HEADERS
-    });
-    for (const e of entries) {
-      await supaUpsertOne('fintrack_card_entries', {
+    for (let i = 0; i < entries.length; i += 20) {
+      const batch = entries.slice(i, i+20).map(e => ({
         id: e.id, card_id: e.cardId, date: e.date, type: e.type,
         amount: e.amount||0, cat: e.cat||'', description: e.desc||'',
         ref: e.ref||'', payment_type: e.paymentType||'',
         linked_bank_id: e.linkedBankId||'', is_payment: !!e.isPayment
+      }));
+      const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_card_entries`, {
+        method: 'POST',
+        headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(batch)
       });
+      if (!r.ok) console.log('pushCardEntriesToSupa error:', await r.text());
     }
-    console.log('Pushed', entries.length, 'card entries to Supabase');
-  } catch(e) { console.log('pushCardEntriesToSupa error:', e); }
+    console.log('✓ Pushed', entries.length, 'card entries');
+  } catch(e) { console.log('pushCardEntriesToSupa exception:', e); }
 }
 
 async function pushODsToSupa(ods) {
