@@ -856,6 +856,11 @@
     <div id="page-cards" class="section">
       <div class="page-header"><h2>Credit Cards</h2><p>Full statement — track spending, due dates and payments</p></div>
       <div class="content">
+        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
+          <span id="card-sync-status" style="font-size:12px;color:var(--text3);">☁ Not synced yet</span>
+          <button class="btn sm green" onclick="forcePushCards()">☁ Upload cards to cloud</button>
+          <button class="btn sm blue" onclick="forcePullCards()">⬇ Download cards from cloud</button>
+        </div>
         <div class="metrics" id="card-metrics"></div>
         <div id="card-due-alert" style="margin-bottom:1rem;"></div>
 
@@ -4867,7 +4872,21 @@ async function supaUpsertOne(table, row) {
 // Generic delete all rows for a user
 async function supaDeleteUserRows(table, userId) {
   try {
+    // Try deleting by user_id first
     await fetch(`${SUPA_URL}/rest/v1/${table}?user_id=eq.${userId}`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+    // Also try deleting any rows without user_id (old data)
+    await fetch(`${SUPA_URL}/rest/v1/${table}?user_id=is.null`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+  } catch(e) {}
+}
+
+// Force delete all rows in a table regardless of user_id
+async function supaDeleteAll(table) {
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?id=neq.NONE`, {
       method: 'DELETE', headers: SUPA_HEADERS
     });
   } catch(e) {}
@@ -4923,7 +4942,15 @@ async function pushBankEntriesToSupa(entries) {
 async function pushCardsToSupa(cards) {
   if (!currentUser) return;
   try {
-    await supaDeleteUserRows('fintrack_cards', currentUser.id);
+    // Delete all existing card records for this user
+    await fetch(`${SUPA_URL}/rest/v1/fintrack_cards?user_id=eq.${currentUser.id}`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+    // Also clear orphaned records
+    await fetch(`${SUPA_URL}/rest/v1/fintrack_cards?user_id=is.null`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
+    // Re-insert all cards
     for (const c of cards) {
       await supaUpsertOne('fintrack_cards', {
         id: c.id, user_id: currentUser.id, name: c.name, bank: c.bank||'',
@@ -4931,11 +4958,16 @@ async function pushCardsToSupa(cards) {
         stmt_date: c.stmtDate||'', min_payment: c.minPayment||0, last4: c.last4||''
       });
     }
-  } catch(e) {}
+    console.log('Pushed', cards.length, 'cards to Supabase');
+  } catch(e) { console.log('pushCardsToSupa error:', e); }
 }
 
 async function pushCardEntriesToSupa(entries) {
   try {
+    // Clear all existing card entries then re-insert
+    await fetch(`${SUPA_URL}/rest/v1/fintrack_card_entries?id=neq.NONE_PLACEHOLDER`, {
+      method: 'DELETE', headers: SUPA_HEADERS
+    });
     for (const e of entries) {
       await supaUpsertOne('fintrack_card_entries', {
         id: e.id, card_id: e.cardId, date: e.date, type: e.type,
@@ -4944,7 +4976,8 @@ async function pushCardEntriesToSupa(entries) {
         linked_bank_id: e.linkedBankId||'', is_payment: !!e.isPayment
       });
     }
-  } catch(e) {}
+    console.log('Pushed', entries.length, 'card entries to Supabase');
+  } catch(e) { console.log('pushCardEntriesToSupa error:', e); }
 }
 
 async function pushODsToSupa(ods) {
@@ -5179,6 +5212,46 @@ async function forceSyncTracking() {
   await syncTrackingFromSupabase();
   renderLoans(); renderBanks(); renderCards(); renderOverdraft();
   toast('✓ All tracking data synced!');
+}
+
+// ===================== CARD FORCE SYNC =====================
+async function forcePushCards() {
+  const cards = getCards();
+  const entries = getCardEntries();
+  const el = document.getElementById('card-sync-status');
+  if (!cards.length) { toast('No cards to upload.'); return; }
+  if (el) el.textContent = '☁ Uploading...';
+  await pushCardsToSupa(cards);
+  await pushCardEntriesToSupa(entries);
+  if (el) el.textContent = `☁ Uploaded ${cards.length} cards ✓`;
+  toast(`✓ ${cards.length} card(s) uploaded to cloud`);
+}
+
+async function forcePullCards() {
+  if (!currentUser) return;
+  const el = document.getElementById('card-sync-status');
+  if (el) el.textContent = '☁ Downloading...';
+  try {
+    const cards = await sbGet('fintrack_cards', `user_id=eq.${currentUser.id}`);
+    const cardEntries = await sbGet('fintrack_card_entries');
+    if (!cards.length) {
+      if (el) el.textContent = '☁ No cards found in cloud';
+      toast('No cards found in cloud. Upload from PC first.');
+      return;
+    }
+    localStorage.setItem('fintrack_cards', JSON.stringify(
+      cards.map(c => ({ id:c.id, name:c.name, bank:c.bank, limit:parseFloat(c.credit_limit)||0, dueDate:c.due_date, stmtDate:c.stmt_date, minPayment:parseFloat(c.min_payment)||0, last4:c.last4 }))
+    ));
+    if (cardEntries.length) localStorage.setItem('fintrack_card_entries', JSON.stringify(
+      cardEntries.map(e => ({ id:e.id, cardId:e.card_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, cat:e.cat, desc:e.description, ref:e.ref, paymentType:e.payment_type, linkedBankId:e.linked_bank_id, isPayment:e.is_payment }))
+    ));
+    if (el) el.textContent = `☁ Downloaded ${cards.length} cards ✓`;
+    renderCards();
+    toast(`✓ ${cards.length} card(s) downloaded`);
+  } catch(e) {
+    if (el) el.textContent = '☁ Download failed';
+    toast('Download failed.');
+  }
 }
 
 // ===================== LOAN FORCE SYNC =====================
