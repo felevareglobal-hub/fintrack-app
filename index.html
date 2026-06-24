@@ -1841,8 +1841,26 @@ function showPage(id) {
 // ===================== CATEGORIES =====================
 function populateCats() {
   const sel = document.getElementById('t-cat');
-  // Ensure Taxes exists in CATS (may be missing in older saved cats)
+  // Ensure Taxes exists in CATS
   if (!CATS['Taxes']) CATS['Taxes'] = DEFAULT_CATS['Taxes'];
+
+  if (currentType === 'Savings') {
+    // Use real bank names as categories
+    const banks = getBanks();
+    if (banks.length > 0) {
+      sel.innerHTML = banks.map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+    } else {
+      // Fallback to default if no banks added yet
+      sel.innerHTML = Object.keys(CATS['Savings']).map(c => `<option>${c}</option>`).join('');
+    }
+    // No sub-categories needed for Savings
+    const sub = document.getElementById('t-sub');
+    sub.innerHTML = '<option value="">Not applicable</option>';
+    sub.style.opacity = '0.5';
+    sub.disabled = false;
+    return;
+  }
+
   const cats = CATS[currentType] || {};
   sel.innerHTML = Object.keys(cats).map(c => `<option>${c}</option>`).join('');
   updateSub();
@@ -1854,12 +1872,14 @@ function updateSub() {
   const sel = document.getElementById('t-sub');
   sel.disabled = false;
 
-  // Dynamically inject real bank names for Savings
+  // For Savings, bank name is already the category — no sub needed
   if (currentType === 'Savings') {
-    const banks = getBanks();
-    if (banks.length > 0) {
-      subs = banks.map(b => b.name);
-    }
+    const sub = document.getElementById('t-sub');
+    sub.innerHTML = '<option value="">Not applicable</option>';
+    sub.style.opacity = '0.5';
+    sub.disabled = false;
+    suggestGSTSlab(cat);
+    return;
   }
 
   // Dynamically inject real credit card names for Expenses > Credit Card
@@ -2995,7 +3015,21 @@ function openEditModal(id) {
 function updateEditCats(selCat, selSub) {
   const type = document.getElementById('e-type').value;
   const catSel = document.getElementById('e-cat');
-  catSel.innerHTML = Object.keys(CATS[type]).map(c => `<option ${c===selCat?'selected':''}>${c}</option>`).join('');
+
+  if (type === 'Savings') {
+    const banks = getBanks();
+    if (banks.length > 0) {
+      catSel.innerHTML = banks.map(b => `<option value="${b.name}" ${b.name===selCat?'selected':''}>${b.name}</option>`).join('');
+    } else {
+      catSel.innerHTML = Object.keys(CATS['Savings']).map(c => `<option ${c===selCat?'selected':''}>${c}</option>`).join('');
+    }
+    const sub = document.getElementById('e-sub');
+    sub.innerHTML = '<option value="">Not applicable</option>';
+    sub.disabled = true; sub.style.opacity = '0.5';
+    return;
+  }
+
+  catSel.innerHTML = Object.keys(CATS[type]||{}).map(c => `<option ${c===selCat?'selected':''}>${c}</option>`).join('');
   updateEditSub(selSub);
 }
 
@@ -3004,10 +3038,11 @@ function updateEditSub(selSub) {
   const cat  = document.getElementById('e-cat').value;
   let subs   = (CATS[type] && CATS[type][cat]) ? [...CATS[type][cat]] : [];
 
-  // Dynamically inject real bank names for Savings
+  // For Savings, bank name is the category — no sub needed
   if (type === 'Savings') {
-    const banks = getBanks();
-    if (banks.length > 0) subs = banks.map(b => b.name);
+    sel.innerHTML = '<option value="">Not applicable</option>';
+    sel.disabled = true; sel.style.opacity = '0.5';
+    return;
   }
 
   // Dynamically inject real credit card names
