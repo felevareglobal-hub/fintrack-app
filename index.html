@@ -1490,13 +1490,28 @@ function loadCats() {
   if (saved) {
     try {
       CATS = JSON.parse(saved);
-      // Auto-merge new DEFAULT_CATS entries not yet in saved CATS
+      // Deep merge: add missing types, categories AND update empty sub-arrays
       Object.keys(DEFAULT_CATS).forEach(type => {
-        if (!CATS[type]) CATS[type] = DEFAULT_CATS[type];
-        else Object.keys(DEFAULT_CATS[type]).forEach(cat => {
-          if (!CATS[type][cat]) CATS[type][cat] = DEFAULT_CATS[type][cat];
-        });
+        if (!CATS[type]) {
+          CATS[type] = DEFAULT_CATS[type];
+        } else {
+          Object.keys(DEFAULT_CATS[type]).forEach(cat => {
+            if (!CATS[type][cat]) {
+              // New category — add it
+              CATS[type][cat] = DEFAULT_CATS[type][cat];
+            } else if (
+              Array.isArray(CATS[type][cat]) &&
+              CATS[type][cat].length === 0 &&
+              DEFAULT_CATS[type][cat].length > 0
+            ) {
+              // Existing category with empty subs — update with new defaults
+              CATS[type][cat] = DEFAULT_CATS[type][cat];
+            }
+          });
+        }
       });
+      // Always save the merged version back
+      localStorage.setItem('fintrack_cats', JSON.stringify(CATS));
     } catch { CATS = JSON.parse(JSON.stringify(DEFAULT_CATS)); }
   }
 }
