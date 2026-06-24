@@ -1439,7 +1439,10 @@ const DEFAULT_CATS = {
     'Credit Card':['HDFC','Kotak','ICICI','Axis','SBI','AmEx','IndusInd','Yes Bank','IDFC','RBL'],
     'Helper / Cook':['Helper 1','Helper 2','Helper 3','Helper 4'],
     'Grooming':['Clothes','Shoes','Accessories','Watches','Hair Style','Spa','Others'],
-    'Furniture & Fixtures':[], 'Medicines':[], 'Medical Bills':[], 'Education':[],
+    'Furniture & Fixtures':[],
+    'Medicines':['Prescription Medicines','OTC Medicines','Vitamins & Supplements','Medical Equipment','Others'],
+    'Medical Bills':['Doctor Fees','Specialist Consultation','Hospital Charges','ICU / Room Charges','Surgery','Nursing Charges','Ambulance','Tests & Diagnostics','Pathology / Blood Tests','Radiology / X-Ray / MRI / CT Scan','Ultrasound','ECG / Echo','Health Check-up','Physiotherapy','Dental Treatment','Eye Treatment','Maternity / Delivery','Vaccination','Medical Insurance Premium','Others'],
+    'Education':[],
     'Domestic Travel':['Train','Flight','Hotels','Food','Local Travel'],
     'International Travel':['Train','Flight','Hotels','Food','Local Travel','Visa']
   },
@@ -1911,7 +1914,7 @@ function updateSub() {
 }
 
 const GST_SLABS = {
-  'Grocery': 0, 'Milk': 0, 'Vegetables': 0, 'Medicines': 0, 'Education': 0,
+  'Grocery': 0, 'Milk': 0, 'Vegetables': 0, 'Medicines': 5, 'Education': 0,
   'Entertainment': 5, 'Domestic Travel': 5, 'International Travel': 18,
   'Fuel': 28, 'Grooming': 18, 'Medical Bills': 5,
   'Capital Purchase': 18, 'Furniture & Fixtures': 18,
