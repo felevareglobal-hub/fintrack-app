@@ -856,10 +856,13 @@
     <div id="page-cards" class="section">
       <div class="page-header"><h2>Credit Cards</h2><p>Full statement — track spending, due dates and payments</p></div>
       <div class="content">
-        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
-          <span id="card-sync-status" style="font-size:12px;color:var(--text3);">☁ Not synced yet</span>
-          <button class="btn sm green" onclick="forcePushCards()">☁ Upload cards to cloud</button>
-          <button class="btn sm blue" onclick="forcePullCards()">⬇ Download cards from cloud</button>
+        <div class="card" style="background:var(--blue-light);border-color:#93C5FD;margin-bottom:1rem;padding:0.75rem 1rem;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:13px;font-weight:600;color:var(--blue);">☁ Cloud Sync</span>
+            <span id="card-sync-status" style="font-size:12px;color:var(--text2);">Ready</span>
+            <button class="btn sm green" onclick="forcePushCards()">⬆ Upload to cloud</button>
+            <button class="btn sm blue" onclick="forcePullCards()">⬇ Download from cloud</button>
+          </div>
         </div>
         <div class="metrics" id="card-metrics"></div>
         <div id="card-due-alert" style="margin-bottom:1rem;"></div>
@@ -985,10 +988,13 @@
       <div class="page-header"><h2>Loan Tracker</h2><p>Track all running loans — EMI, tenure, outstanding balance</p></div>
       <div class="content">
         <!-- SYNC BAR -->
-        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
-          <span id="loan-sync-status" style="font-size:12px;color:var(--text3);">☁ Not synced yet</span>
-          <button class="btn sm green" onclick="forcePushLoans()">☁ Upload loans to cloud</button>
-          <button class="btn sm blue" onclick="forcePullLoans()">⬇ Download loans from cloud</button>
+        <div class="card" style="background:var(--blue-light);border-color:#93C5FD;margin-bottom:1rem;padding:0.75rem 1rem;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:13px;font-weight:600;color:var(--blue);">☁ Cloud Sync</span>
+            <span id="loan-sync-status" style="font-size:12px;color:var(--text2);">Ready</span>
+            <button class="btn sm green" onclick="forcePushLoans()">⬆ Upload to cloud</button>
+            <button class="btn sm blue" onclick="forcePullLoans()">⬇ Download from cloud</button>
+          </div>
         </div>
         <!-- SUMMARY METRICS -->
         <div class="metrics" id="loan-metrics" style="margin-bottom:1.25rem;"></div>
@@ -5212,6 +5218,39 @@ async function forceSyncTracking() {
   await syncTrackingFromSupabase();
   renderLoans(); renderBanks(); renderCards(); renderOverdraft();
   toast('✓ All tracking data synced!');
+}
+
+// ===================== BANK FORCE SYNC =====================
+async function forcePushBanks() {
+  const banks = getBanks();
+  const entries = getBankEntries();
+  const el = document.getElementById('bank-sync-status');
+  if (!banks.length) { toast('No bank accounts to upload.'); return; }
+  if (el) el.textContent = '☁ Uploading...';
+  await pushBanksToSupa(banks);
+  await pushBankEntriesToSupa(entries);
+  if (el) el.textContent = `☁ Uploaded ${banks.length} accounts ✓`;
+  toast(`✓ ${banks.length} bank account(s) uploaded`);
+}
+
+async function forcePullBanks() {
+  if (!currentUser) return;
+  const el = document.getElementById('bank-sync-status');
+  if (el) el.textContent = '☁ Downloading...';
+  try {
+    const banks = await sbGet('fintrack_banks', `user_id=eq.${currentUser.id}`);
+    const entries = await sbGet('fintrack_bank_entries');
+    if (!banks.length) { if(el) el.textContent='☁ No banks in cloud'; toast('No banks in cloud.'); return; }
+    localStorage.setItem('fintrack_banks', JSON.stringify(
+      banks.map(b => ({ id:b.id, name:b.name, type:b.type, openingBalance:parseFloat(b.opening_balance)||0, date:b.date, accno:b.accno, ifsc:b.ifsc }))
+    ));
+    if (entries.length) localStorage.setItem('fintrack_bank_entries', JSON.stringify(
+      entries.map(e => ({ id:e.id, bankId:e.bank_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, mode:e.mode, desc:e.description, ref:e.ref, transferId:e.transfer_id, isTransfer:e.is_transfer, transferTo:e.transfer_to, transferFrom:e.transfer_from, isCardPayment:e.is_card_payment, linkedCardId:e.linked_card_id }))
+    ));
+    if (el) el.textContent = `☁ Downloaded ${banks.length} accounts ✓`;
+    renderBanks(); renderBankLedger();
+    toast(`✓ ${banks.length} bank(s) downloaded`);
+  } catch(e) { if(el) el.textContent='☁ Failed'; toast('Download failed.'); }
 }
 
 // ===================== CARD FORCE SYNC =====================
