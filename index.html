@@ -232,9 +232,10 @@
   /* TOAST */
   /* EDIT MODAL */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:1rem; }
-  .modal-box { background:var(--surface); border-radius:var(--radius); padding:1.5rem; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .modal-box { background:var(--surface); border-radius:var(--radius); padding:1.5rem; width:100%; max-width:580px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
   .modal-box h3 { font-size:16px; font-weight:700; margin-bottom:1.25rem; color:var(--text); }
   .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:1.25rem; border-top:1px solid var(--border); padding-top:1rem; }
+  .modal-box.wide { max-width:700px; }
 
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy); color: white; padding: 12px 20px; border-radius: var(--radius); font-size: 13px; font-weight: 500; z-index: 9999; transform: translateY(80px); opacity: 0; transition: all 0.3s; box-shadow: var(--shadow-md); }
   #toast.show { transform: translateY(0); opacity: 1; }
@@ -1282,6 +1283,143 @@
       </label>
     </div>
     <button class="btn-logout" onclick="doLogout()"><span>🚪</span> Sign out</button>
+  </div>
+</div>
+
+<!-- EDIT LOAN MODAL -->
+<div id="edit-loan-modal" class="modal-overlay" style="display:none;" onclick="closeModal('edit-loan-modal',event)">
+  <div class="modal-box wide">
+    <h3>✏️ Edit Loan</h3>
+    <input type="hidden" id="el-id">
+    <div class="form-row c4">
+      <div class="fl"><label>Loan type</label>
+        <select id="el-type">
+          <option>Home Loan</option><option>Personal Loan</option><option>Car Loan</option>
+          <option>Education Loan</option><option>Business Loan</option><option>Gold Loan</option>
+          <option>Loan Against Property</option><option>Two Wheeler Loan</option>
+          <option>Consumer Durable Loan</option><option>Others</option>
+        </select>
+      </div>
+      <div class="fl"><label>Lender</label><input type="text" id="el-lender"></div>
+      <div class="fl"><label>Loan amount (₹)</label><input type="number" id="el-amount" min="0"></div>
+      <div class="fl"><label>Outstanding (₹)</label><input type="number" id="el-outstanding" min="0"></div>
+    </div>
+    <div class="form-row c4">
+      <div class="fl"><label>EMI (₹)</label><input type="number" id="el-emi" min="0"></div>
+      <div class="fl"><label>Interest rate (%)</label><input type="number" id="el-rate" min="0" step="0.1"></div>
+      <div class="fl"><label>EMI date (day)</label><input type="number" id="el-emidate" min="1" max="31"></div>
+      <div class="fl"><label>Start date</label><input type="date" id="el-start"></div>
+    </div>
+    <div class="form-row c4">
+      <div class="fl"><label>Total tenure (months)</label><input type="number" id="el-tenure" min="1"></div>
+      <div class="fl"><label>EMIs paid</label><input type="number" id="el-paid" min="0"></div>
+      <div class="fl"><label>Account number</label><input type="text" id="el-accno"></div>
+      <div class="fl"><label>Co-applicant</label><input type="text" id="el-coapplicant"></div>
+    </div>
+    <div class="fl" style="margin-bottom:10px;"><label>Notes</label><input type="text" id="el-note"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('edit-loan-modal')">Cancel</button>
+      <button class="btn red" onclick="deleteLoanFromModal()">🗑 Delete loan</button>
+      <button class="btn green" onclick="saveLoanEdit()">✓ Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT CARD ENTRY MODAL -->
+<div id="edit-card-entry-modal" class="modal-overlay" style="display:none;" onclick="closeModal('edit-card-entry-modal',event)">
+  <div class="modal-box">
+    <h3>✏️ Edit Card Entry</h3>
+    <input type="hidden" id="ece-id">
+    <div class="form-row c3">
+      <div class="fl"><label>Date</label><input type="date" id="ece-date"></div>
+      <div class="fl"><label>Type</label>
+        <select id="ece-type">
+          <option value="Debit">Debit (Purchase/Spend)</option>
+          <option value="Credit">Credit (Payment/Refund)</option>
+        </select>
+      </div>
+      <div class="fl"><label>Amount (₹)</label><input type="number" id="ece-amt" min="0" step="0.01"></div>
+    </div>
+    <div class="form-row c2">
+      <div class="fl"><label>Category</label>
+        <select id="ece-cat">
+          <option>Shopping</option><option>Food & Dining</option><option>Travel</option>
+          <option>Fuel</option><option>Entertainment</option><option>Medical</option>
+          <option>Groceries</option><option>Payment</option><option>Bank Charges</option>
+          <option>EMI</option><option>Others</option>
+        </select>
+      </div>
+      <div class="fl"><label>Reference</label><input type="text" id="ece-ref" placeholder="Optional"></div>
+    </div>
+    <div class="fl" style="margin-bottom:10px;"><label>Description</label><input type="text" id="ece-desc"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('edit-card-entry-modal')">Cancel</button>
+      <button class="btn red" onclick="deleteCardEntryFromModal()">🗑 Delete</button>
+      <button class="btn green" onclick="saveCardEntryEdit()">✓ Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT BANK ENTRY MODAL -->
+<div id="edit-bank-entry-modal" class="modal-overlay" style="display:none;" onclick="closeModal('edit-bank-entry-modal',event)">
+  <div class="modal-box">
+    <h3>✏️ Edit Bank Entry</h3>
+    <input type="hidden" id="ebe-id">
+    <div class="form-row c3">
+      <div class="fl"><label>Date</label><input type="date" id="ebe-date"></div>
+      <div class="fl"><label>Type</label>
+        <select id="ebe-type">
+          <option value="Credit">Credit (Money IN)</option>
+          <option value="Debit">Debit (Money OUT)</option>
+        </select>
+      </div>
+      <div class="fl"><label>Amount (₹)</label><input type="number" id="ebe-amt" min="0" step="0.01"></div>
+    </div>
+    <div class="form-row c2">
+      <div class="fl"><label>Mode</label>
+        <select id="ebe-mode">
+          <option>UPI</option><option>Debit Card</option><option>NEFT</option><option>RTGS</option>
+          <option>IMPS</option><option>Cheque</option><option>Cash</option>
+          <option>Bank Charges</option><option>Interest</option><option>Others</option>
+        </select>
+      </div>
+      <div class="fl"><label>Reference / UTR</label><input type="text" id="ebe-ref" placeholder="Optional"></div>
+    </div>
+    <div class="fl" style="margin-bottom:10px;"><label>Description</label><input type="text" id="ebe-desc"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('edit-bank-entry-modal')">Cancel</button>
+      <button class="btn red" onclick="deleteBankEntryFromModal()">🗑 Delete</button>
+      <button class="btn green" onclick="saveBankEntryEdit()">✓ Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT OD ENTRY MODAL -->
+<div id="edit-od-entry-modal" class="modal-overlay" style="display:none;" onclick="closeModal('edit-od-entry-modal',event)">
+  <div class="modal-box">
+    <h3>✏️ Edit OD Entry</h3>
+    <input type="hidden" id="eoe-id">
+    <div class="form-row c3">
+      <div class="fl"><label>Date</label><input type="date" id="eoe-date"></div>
+      <div class="fl"><label>Type</label>
+        <select id="eoe-type">
+          <option value="Debit">Debit (Withdrawal)</option>
+          <option value="Credit">Credit (Repayment)</option>
+          <option value="Interest">Interest charged</option>
+          <option value="Charges">Bank charges</option>
+        </select>
+      </div>
+      <div class="fl"><label>Amount (₹)</label><input type="number" id="eoe-amt" min="0" step="0.01"></div>
+    </div>
+    <div class="form-row c2">
+      <div class="fl"><label>Reference</label><input type="text" id="eoe-ref" placeholder="Optional"></div>
+      <div class="fl"><label>Description</label><input type="text" id="eoe-desc"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('edit-od-entry-modal')">Cancel</button>
+      <button class="btn red" onclick="deleteODEntryFromModal()">🗑 Delete</button>
+      <button class="btn green" onclick="saveODEntryEdit()">✓ Save changes</button>
+    </div>
   </div>
 </div>
 
@@ -3349,7 +3487,10 @@ function renderBankLedger() {
       <td class="amt-pos">${e.type==='Credit'?fmt(e.amount):'—'}</td>
       <td class="amt-neg">${e.type==='Debit'?fmt(e.amount):'—'}</td>
       <td style="font-weight:600;">${fmt(balMap[e.id]||0)}</td>
-      <td><button class="btn red sm" onclick="deleteBankEntry('${e.id}')" ${e.isTransfer?'title="Deletes both sides of transfer"':''}>${e.isTransfer?'⇄✕':'✕'}</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn sm" onclick="openEditBankEntry('${e.id}')" title="Edit">✏️</button>
+        <button class="btn red sm" onclick="deleteBankEntry('${e.id}')" ${e.isTransfer?'title="Deletes both sides of transfer"':''}>${e.isTransfer?'⇄✕':'✕'}</button>
+      </td>
     </tr>`;
   }).join('') +
       `<tr style="background:var(--bg);font-weight:700;">
@@ -4298,6 +4439,7 @@ function renderLoans() {
           <div style="font-size:18px;font-weight:700;color:var(--red);">${fmt(loan.outstanding)}</div>
           <div style="font-size:11px;color:var(--text3);">outstanding</div>
         </div>
+        <button class="btn sm" onclick="openEditLoan('${loan.id}')" title="Edit loan">✏️</button>
         <button class="btn red sm" onclick="deleteLoan('${loan.id}')">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:10px;">
@@ -4509,7 +4651,10 @@ function renderODLedger() {
       <td class="amt-neg">${isDebit?fmt(e.amount):'—'}</td>
       <td style="font-weight:600;color:var(--red);">${fmt(util)}</td>
       <td style="font-weight:600;color:var(--accent);">${fmt(Math.max(0,avail))}</td>
-      <td><button class="btn red sm" onclick="deleteODEntry('${e.id}')">✕</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn sm" onclick="openEditODEntry('${e.id}')" title="Edit">✏️</button>
+        <button class="btn red sm" onclick="deleteODEntry('${e.id}')">✕</button>
+      </td>
     </tr>`;
   }).join('') + `
   <tr style="background:var(--bg);font-weight:700;">
@@ -5080,6 +5225,238 @@ document.addEventListener('DOMContentLoaded', () => {
   const accSel = document.getElementById('t-account');
   if (accSel) accSel.addEventListener('change', updateBalancePreview);
 });
+
+// ===================== GENERIC MODAL HELPERS =====================
+function closeModal(id, e) {
+  if (e && e.target !== document.getElementById(id)) return;
+  document.getElementById(id).style.display = 'none';
+}
+function openModal(id) {
+  document.getElementById(id).style.display = 'flex';
+}
+
+// ===================== EDIT LOAN =====================
+function openEditLoan(id) {
+  const loan = getLoans().find(l => l.id === id);
+  if (!loan) return;
+  document.getElementById('el-id').value = id;
+  document.getElementById('el-type').value = loan.type;
+  document.getElementById('el-lender').value = loan.lender || '';
+  document.getElementById('el-amount').value = loan.amount || '';
+  document.getElementById('el-outstanding').value = loan.outstanding || '';
+  document.getElementById('el-emi').value = loan.emi || '';
+  document.getElementById('el-rate').value = loan.rate || '';
+  document.getElementById('el-emidate').value = loan.emiDate || '';
+  document.getElementById('el-start').value = loan.start || '';
+  document.getElementById('el-tenure').value = loan.tenure || '';
+  document.getElementById('el-paid').value = loan.paid || '';
+  document.getElementById('el-accno').value = loan.accno || '';
+  document.getElementById('el-coapplicant').value = loan.coapplicant || '';
+  document.getElementById('el-note').value = loan.note || '';
+  openModal('edit-loan-modal');
+}
+
+function saveLoanEdit() {
+  const id = document.getElementById('el-id').value;
+  const loans = getLoans();
+  const idx = loans.findIndex(l => l.id === id);
+  if (idx === -1) return;
+  loans[idx] = {
+    ...loans[idx],
+    type: document.getElementById('el-type').value,
+    lender: document.getElementById('el-lender').value.trim(),
+    amount: parseFloat(document.getElementById('el-amount').value) || 0,
+    outstanding: parseFloat(document.getElementById('el-outstanding').value) || 0,
+    emi: parseFloat(document.getElementById('el-emi').value) || 0,
+    rate: parseFloat(document.getElementById('el-rate').value) || 0,
+    emiDate: document.getElementById('el-emidate').value,
+    start: document.getElementById('el-start').value,
+    tenure: parseInt(document.getElementById('el-tenure').value) || 0,
+    paid: parseInt(document.getElementById('el-paid').value) || 0,
+    accno: document.getElementById('el-accno').value.trim(),
+    coapplicant: document.getElementById('el-coapplicant').value.trim(),
+    note: document.getElementById('el-note').value.trim()
+  };
+  saveLoans(loans);
+  closeModal('edit-loan-modal');
+  renderLoans();
+  toast('Loan updated ✓');
+}
+
+function deleteLoanFromModal() {
+  const id = document.getElementById('el-id').value;
+  if (!confirm('Delete this loan permanently?')) return;
+  saveLoans(getLoans().filter(l => l.id !== id));
+  closeModal('edit-loan-modal');
+  renderLoans();
+  toast('Loan deleted');
+}
+
+// ===================== EDIT CARD ENTRY =====================
+function openEditCardEntry(id) {
+  const entry = getCardEntries().find(e => e.id === id);
+  if (!entry) return;
+  document.getElementById('ece-id').value = id;
+  document.getElementById('ece-date').value = entry.date || '';
+  document.getElementById('ece-type').value = entry.type || 'Debit';
+  document.getElementById('ece-amt').value = entry.amount || '';
+  document.getElementById('ece-cat').value = entry.cat || 'Others';
+  document.getElementById('ece-ref').value = entry.ref || '';
+  document.getElementById('ece-desc').value = entry.desc || '';
+  openModal('edit-card-entry-modal');
+}
+
+function saveCardEntryEdit() {
+  const id = document.getElementById('ece-id').value;
+  const entries = getCardEntries();
+  const idx = entries.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const amt = parseFloat(document.getElementById('ece-amt').value) || 0;
+  if (!amt) { toast('Enter a valid amount.'); return; }
+  entries[idx] = {
+    ...entries[idx],
+    date: document.getElementById('ece-date').value,
+    type: document.getElementById('ece-type').value,
+    amount: amt,
+    cat: document.getElementById('ece-cat').value,
+    ref: document.getElementById('ece-ref').value.trim(),
+    desc: document.getElementById('ece-desc').value.trim()
+  };
+  saveCardEntries(entries);
+  closeModal('edit-card-entry-modal');
+  renderCardStatement();
+  renderCards();
+  toast('Card entry updated ✓');
+}
+
+function deleteCardEntryFromModal() {
+  const id = document.getElementById('ece-id').value;
+  const entry = getCardEntries().find(e => e.id === id);
+  if (!entry) return;
+  let msg = 'Delete this card entry?';
+  if (entry.isPayment) msg = 'This is a payment entry linked to a bank account. Delete both?';
+  if (!confirm(msg)) return;
+  if (entry.isPayment) {
+    const payId = id.replace('_CC','');
+    saveBankEntries(getBankEntries().filter(e => e.id !== payId + '_BK'));
+  }
+  saveCardEntries(getCardEntries().filter(e => e.id !== id));
+  closeModal('edit-card-entry-modal');
+  renderCardStatement();
+  renderCards();
+  toast('Deleted');
+}
+
+// ===================== EDIT BANK ENTRY =====================
+function openEditBankEntry(id) {
+  const entry = getBankEntries().find(e => e.id === id);
+  if (!entry) return;
+  document.getElementById('ebe-id').value = id;
+  document.getElementById('ebe-date').value = entry.date || '';
+  document.getElementById('ebe-type').value = entry.type || 'Debit';
+  document.getElementById('ebe-amt').value = entry.amount || '';
+  document.getElementById('ebe-mode').value = entry.mode || 'Others';
+  document.getElementById('ebe-ref').value = entry.ref || '';
+  document.getElementById('ebe-desc').value = entry.desc || '';
+  openModal('edit-bank-entry-modal');
+}
+
+function saveBankEntryEdit() {
+  const id = document.getElementById('ebe-id').value;
+  const entries = getBankEntries();
+  const idx = entries.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const amt = parseFloat(document.getElementById('ebe-amt').value) || 0;
+  if (!amt) { toast('Enter a valid amount.'); return; }
+  entries[idx] = {
+    ...entries[idx],
+    date: document.getElementById('ebe-date').value,
+    type: document.getElementById('ebe-type').value,
+    amount: amt,
+    mode: document.getElementById('ebe-mode').value,
+    ref: document.getElementById('ebe-ref').value.trim(),
+    desc: document.getElementById('ebe-desc').value.trim()
+  };
+  saveBankEntries(entries);
+  closeModal('edit-bank-entry-modal');
+  renderBankLedger();
+  renderBanks();
+  toast('Bank entry updated ✓');
+}
+
+function deleteBankEntryFromModal() {
+  const id = document.getElementById('ebe-id').value;
+  const entries = getBankEntries();
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+  if (entry.isTransfer) {
+    if (!confirm('This is a transfer. Delete both sides?')) return;
+    saveBankEntries(entries.filter(e => e.transferId !== entry.transferId));
+  } else {
+    if (!confirm('Delete this bank entry?')) return;
+    saveBankEntries(entries.filter(e => e.id !== id));
+  }
+  closeModal('edit-bank-entry-modal');
+  renderBankLedger();
+  renderBanks();
+  toast('Deleted');
+}
+
+// ===================== EDIT OD ENTRY =====================
+function openEditODEntry(id) {
+  const entry = getODEntries().find(e => e.id === id);
+  if (!entry) return;
+  document.getElementById('eoe-id').value = id;
+  document.getElementById('eoe-date').value = entry.date || '';
+  document.getElementById('eoe-type').value = entry.type || 'Debit';
+  document.getElementById('eoe-amt').value = entry.amount || '';
+  document.getElementById('eoe-ref').value = entry.ref || '';
+  document.getElementById('eoe-desc').value = entry.desc || '';
+  openModal('edit-od-entry-modal');
+}
+
+function saveODEntryEdit() {
+  const id = document.getElementById('eoe-id').value;
+  const entries = getODEntries();
+  const idx = entries.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  const amt = parseFloat(document.getElementById('eoe-amt').value) || 0;
+  if (!amt) { toast('Enter a valid amount.'); return; }
+  const odId = entries[idx].odId;
+  entries[idx] = {
+    ...entries[idx],
+    date: document.getElementById('eoe-date').value,
+    type: document.getElementById('eoe-type').value,
+    amount: amt,
+    ref: document.getElementById('eoe-ref').value.trim(),
+    desc: document.getElementById('eoe-desc').value.trim()
+  };
+  saveODEntries(entries);
+  // Recalc OD utilised
+  const ods = getODs();
+  const od = ods.find(o => o.id === odId);
+  if (od) { od.used = Math.max(0, getODUtilised(odId)); saveODs(ods); }
+  closeModal('edit-od-entry-modal');
+  renderODLedger();
+  renderOverdraft();
+  toast('OD entry updated ✓');
+}
+
+function deleteODEntryFromModal() {
+  const id = document.getElementById('eoe-id').value;
+  if (!confirm('Delete this OD entry?')) return;
+  const entry = getODEntries().find(e => e.id === id);
+  saveODEntries(getODEntries().filter(e => e.id !== id));
+  if (entry) {
+    const ods = getODs();
+    const od = ods.find(o => o.id === entry.odId);
+    if (od) { od.used = Math.max(0, getODUtilised(entry.odId)); saveODs(ods); }
+  }
+  closeModal('edit-od-entry-modal');
+  renderODLedger();
+  renderOverdraft();
+  toast('Deleted');
+}
 
 // Keyboard: Enter to login
 document.getElementById('l-pin').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
