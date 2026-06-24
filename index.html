@@ -390,8 +390,8 @@
     <button onclick="showPage('dashboard')" id="mn-dashboard"><span class="ni">📊</span>Home</button>
     <button onclick="showPage('add')" id="mn-add"><span class="ni">➕</span>Add</button>
     <button onclick="showPage('transactions')" id="mn-transactions"><span class="ni">📋</span>Txns</button>
-    <button onclick="showPage('budget')" id="mn-budget"><span class="ni">🎯</span>Budget</button>
-    <button onclick="showPage('users')" id="mn-users"><span class="ni">👥</span>Users</button>
+    <button onclick="showPage('banks')" id="mn-banks"><span class="ni">🏦</span>Banks</button>
+    <button onclick="showPage('cards')" id="mn-cards"><span class="ni">💳</span>Cards</button>
     <button onclick="openDrawer()" id="mn-more"><span class="ni">☰</span>More</button>
   </div>
 
@@ -809,7 +809,7 @@
 
           <!-- ADD ENTRY FORM -->
           <div id="bank-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
-            <div class="form-row c4">
+            <div class="form-row c2">
               <div class="fl"><label>Date</label><input type="date" id="be-date"></div>
               <div class="fl"><label>Type</label>
                 <select id="be-type" onchange="document.getElementById('be-amt').style.color=this.value==='Credit'?'var(--accent)':'var(--red)'">
@@ -817,6 +817,8 @@
                   <option value="Debit">Debit (Money OUT)</option>
                 </select>
               </div>
+            </div>
+            <div class="form-row c2">
               <div class="fl"><label>Amount (₹)</label><input type="number" id="be-amt" placeholder="0" min="0"></div>
               <div class="fl"><label>Mode</label>
                 <select id="be-mode">
@@ -834,8 +836,8 @@
             </div>
           </div>
           <!-- LEDGER TABLE -->
-          <div class="tbl-wrap">
-            <table>
+          <div class="tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table style="min-width:600px;">
               <thead><tr><th>Date</th><th>Description</th><th>Mode</th><th>Reference</th><th style="color:var(--accent);">Credit (+)</th><th style="color:var(--red);">Debit (−)</th><th>Balance</th><th></th></tr></thead>
               <tbody id="bank-ledger-tbody"></tbody>
             </table>
@@ -863,15 +865,19 @@
         <!-- ADD CARD -->
         <div class="card">
           <div class="card-title">➕ Add credit card</div>
-          <div class="form-row c4">
+          <div class="form-row c2">
             <div class="fl"><label>Card name</label><input type="text" id="cc-name" placeholder="e.g. HDFC Regalia"></div>
             <div class="fl"><label>Bank</label><input type="text" id="cc-bank" placeholder="e.g. HDFC"></div>
+          </div>
+          <div class="form-row c2">
             <div class="fl"><label>Credit limit (₹)</label><input type="number" id="cc-limit" placeholder="0" min="0"></div>
             <div class="fl"><label>Outstanding (₹)</label><input type="number" id="cc-due" placeholder="0" min="0"></div>
           </div>
-          <div class="form-row c4">
+          <div class="form-row c2">
             <div class="fl"><label>Due date</label><input type="date" id="cc-date"></div>
             <div class="fl"><label>Statement date (day)</label><input type="number" id="cc-stmt" placeholder="e.g. 15" min="1" max="31"></div>
+          </div>
+          <div class="form-row c2">
             <div class="fl"><label>Min. payment (₹)</label><input type="number" id="cc-min" placeholder="0" min="0"></div>
             <div class="fl"><label>Last 4 digits</label><input type="text" id="cc-last4" placeholder="XXXX" maxlength="4"></div>
           </div>
@@ -930,7 +936,7 @@
 
           <!-- ADD CARD ENTRY FORM -->
           <div id="card-entry-form" style="display:none;background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:1rem;border:1px solid var(--border);">
-            <div class="form-row c4">
+            <div class="form-row c2">
               <div class="fl"><label>Date</label><input type="date" id="ce-date"></div>
               <div class="fl"><label>Type</label>
                 <select id="ce-type">
@@ -938,6 +944,8 @@
                   <option value="Credit">Credit (Payment/Refund)</option>
                 </select>
               </div>
+            </div>
+            <div class="form-row c2">
               <div class="fl"><label>Amount (₹)</label><input type="number" id="ce-amt" placeholder="0" min="0"></div>
               <div class="fl"><label>Category</label>
                 <select id="ce-cat">
@@ -957,8 +965,8 @@
             </div>
           </div>
           <!-- STATEMENT TABLE -->
-          <div class="tbl-wrap">
-            <table>
+          <div class="tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table style="min-width:600px;">
               <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Reference</th><th style="color:var(--accent);">Credit (+)</th><th style="color:var(--red);">Debit (−)</th><th>Balance</th><th></th></tr></thead>
               <tbody id="card-stmt-tbody"></tbody>
             </table>
