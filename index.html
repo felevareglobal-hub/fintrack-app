@@ -747,6 +747,15 @@
     <div id="page-banks" class="section">
       <div class="page-header"><h2>Bank Balances</h2><p>Full ledger — balances update automatically when you add transactions</p></div>
       <div class="content">
+        <!-- CLOUD SYNC BAR -->
+        <div class="card" style="background:var(--blue-light);border-color:#93C5FD;margin-bottom:1rem;padding:0.75rem 1rem;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:13px;font-weight:600;color:var(--blue);">☁ Cloud Sync</span>
+            <span id="bank-sync-status" style="font-size:12px;color:var(--text2);">Ready</span>
+            <button class="btn sm green" onclick="forcePushBanks()">⬆ Upload to cloud</button>
+            <button class="btn sm blue" onclick="forcePullBanks()">⬇ Download from cloud</button>
+          </div>
+        </div>
         <div class="metrics" id="bank-metrics"></div>
 
         <!-- ACCOUNT CARDS -->
@@ -5237,11 +5246,31 @@ async function forcePushBanks() {
   const entries = getBankEntries();
   const el = document.getElementById('bank-sync-status');
   if (!banks.length) { toast('No bank accounts to upload.'); return; }
-  if (el) el.textContent = '☁ Uploading...';
-  await pushBanksToSupa(banks);
-  await pushBankEntriesToSupa(entries);
-  if (el) el.textContent = `☁ Uploaded ${banks.length} accounts ✓`;
-  toast(`✓ ${banks.length} bank account(s) uploaded`);
+  if (el) el.textContent = '☁ Uploading ' + banks.length + ' banks...';
+  try {
+    const rows = banks.map(b => ({
+      id: b.id, user_id: currentUser.id, name: b.name, type: b.type,
+      opening_balance: b.openingBalance||0, date: b.date||'',
+      accno: b.accno||'', ifsc: b.ifsc||''
+    }));
+    const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_banks`, {
+      method: 'POST',
+      headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      toast('Upload error: ' + err.slice(0,100));
+      if (el) el.textContent = '☁ Error';
+      return;
+    }
+    if (entries.length) await pushBankEntriesToSupa(entries);
+    if (el) el.textContent = `☁ Uploaded ${banks.length} banks ✓`;
+    toast(`✓ ${banks.length} bank(s) uploaded to cloud`);
+  } catch(e) {
+    toast('Upload failed: ' + e.message);
+    if (el) el.textContent = '☁ Failed';
+  }
 }
 
 async function forcePullBanks() {
@@ -5251,17 +5280,24 @@ async function forcePullBanks() {
   try {
     const banks = await sbGet('fintrack_banks', `user_id=eq.${currentUser.id}`);
     const entries = await sbGet('fintrack_bank_entries');
-    if (!banks.length) { if(el) el.textContent='☁ No banks in cloud'; toast('No banks in cloud.'); return; }
+    if (!banks.length) {
+      if (el) el.textContent = '☁ No banks in cloud';
+      toast('No banks in cloud. Upload from PC first.');
+      return;
+    }
     localStorage.setItem('fintrack_banks', JSON.stringify(
       banks.map(b => ({ id:b.id, name:b.name, type:b.type, openingBalance:parseFloat(b.opening_balance)||0, date:b.date, accno:b.accno, ifsc:b.ifsc }))
     ));
     if (entries.length) localStorage.setItem('fintrack_bank_entries', JSON.stringify(
       entries.map(e => ({ id:e.id, bankId:e.bank_id, date:e.date, type:e.type, amount:parseFloat(e.amount)||0, mode:e.mode, desc:e.description, ref:e.ref, transferId:e.transfer_id, isTransfer:e.is_transfer, transferTo:e.transfer_to, transferFrom:e.transfer_from, isCardPayment:e.is_card_payment, linkedCardId:e.linked_card_id }))
     ));
-    if (el) el.textContent = `☁ Downloaded ${banks.length} accounts ✓`;
+    if (el) el.textContent = `☁ Downloaded ${banks.length} banks ✓`;
     renderBanks(); renderBankLedger();
-    toast(`✓ ${banks.length} bank(s) downloaded`);
-  } catch(e) { if(el) el.textContent='☁ Failed'; toast('Download failed.'); }
+    toast(`✓ ${banks.length} bank(s) downloaded from cloud`);
+  } catch(e) {
+    if (el) el.textContent = '☁ Failed';
+    toast('Download failed: ' + e.message);
+  }
 }
 
 // ===================== CARD FORCE SYNC =====================
@@ -5270,11 +5306,33 @@ async function forcePushCards() {
   const entries = getCardEntries();
   const el = document.getElementById('card-sync-status');
   if (!cards.length) { toast('No cards to upload.'); return; }
-  if (el) el.textContent = '☁ Uploading...';
-  await pushCardsToSupa(cards);
-  await pushCardEntriesToSupa(entries);
-  if (el) el.textContent = `☁ Uploaded ${cards.length} cards ✓`;
-  toast(`✓ ${cards.length} card(s) uploaded to cloud`);
+  if (el) el.textContent = '☁ Uploading ' + cards.length + ' cards...';
+  try {
+    // Direct upsert to Supabase
+    const rows = cards.map(c => ({
+      id: c.id, user_id: currentUser.id, name: c.name, bank: c.bank||'',
+      credit_limit: c.limit||0, due_date: c.dueDate||'',
+      stmt_date: c.stmtDate||'', min_payment: c.minPayment||0, last4: c.last4||''
+    }));
+    const r = await fetch(`${SUPA_URL}/rest/v1/fintrack_cards`, {
+      method: 'POST',
+      headers: { ...SUPA_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      toast('Upload error: ' + err.slice(0,100));
+      if (el) el.textContent = '☁ Error: ' + err.slice(0,50);
+      return;
+    }
+    // Push entries
+    if (entries.length) await pushCardEntriesToSupa(entries);
+    if (el) el.textContent = `☁ Uploaded ${cards.length} cards ✓`;
+    toast(`✓ ${cards.length} card(s) uploaded to cloud`);
+  } catch(e) {
+    toast('Upload failed: ' + e.message);
+    if (el) el.textContent = '☁ Failed';
+  }
 }
 
 async function forcePullCards() {
@@ -5285,8 +5343,8 @@ async function forcePullCards() {
     const cards = await sbGet('fintrack_cards', `user_id=eq.${currentUser.id}`);
     const cardEntries = await sbGet('fintrack_card_entries');
     if (!cards.length) {
-      if (el) el.textContent = '☁ No cards found in cloud';
-      toast('No cards found in cloud. Upload from PC first.');
+      if (el) el.textContent = '☁ No cards in cloud';
+      toast('No cards found in cloud. Upload from PC first using ⬆ Upload button.');
       return;
     }
     localStorage.setItem('fintrack_cards', JSON.stringify(
@@ -5297,10 +5355,10 @@ async function forcePullCards() {
     ));
     if (el) el.textContent = `☁ Downloaded ${cards.length} cards ✓`;
     renderCards();
-    toast(`✓ ${cards.length} card(s) downloaded`);
+    toast(`✓ ${cards.length} card(s) downloaded from cloud`);
   } catch(e) {
-    if (el) el.textContent = '☁ Download failed';
-    toast('Download failed.');
+    if (el) el.textContent = '☁ Failed';
+    toast('Download failed: ' + e.message);
   }
 }
 
