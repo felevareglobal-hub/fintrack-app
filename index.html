@@ -180,6 +180,8 @@
   .type-tab.active-Donation { background: var(--amber-light); color: var(--amber); border-color: #FCD34D; }
   .type-tab.active-Transfer { background: var(--purple-light); color: var(--purple); border-color: #C4B5FD; font-weight: 700; }
   .type-tab.active-Taxes { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; font-weight: 700; }
+  .type-tab.active-Reimbursements { background: #F0FDF4; color: #15803D; border-color: #86EFAC; font-weight: 700; }
+  .badge-Reimbursements { background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; }
 
   /* TABLE */
   .tbl-wrap { overflow-x: auto; }
@@ -450,6 +452,7 @@
             <button class="type-tab" onclick="setType('Donation')">🤲 Donation</button>
             <button class="type-tab" onclick="setType('Transfer')">⇄ Transfer</button>
             <button class="type-tab" onclick="setType('Taxes')">🧾 Taxes</button>
+            <button class="type-tab" onclick="setType('Reimbursements')">🏢 Reimburse</button>
           </div>
 
           <!-- TRANSFER FORM — shown only when Transfer tab is selected -->
@@ -592,7 +595,7 @@
           <input type="month" id="tf-month" onchange="renderTxns()">
           <select id="tf-type" onchange="updateCatFilter(); renderTxns()">
             <option value="">All types</option>
-            <option>Income</option><option>Expenses</option><option>Investment</option><option>Savings</option><option>Donation</option><option>Taxes</option><option>Transfer</option>
+            <option>Income</option><option>Expenses</option><option>Investment</option><option>Savings</option><option>Donation</option><option>Taxes</option><option>Reimbursements</option><option>Transfer</option>
           </select>
           <select id="tf-cat" onchange="updateSubFilter(); renderTxns()"><option value="">All categories</option></select>
           <select id="tf-sub" onchange="renderTxns()"><option value="">All sub-cats</option></select>
@@ -701,7 +704,7 @@
           <div class="card-title">Month-by-month summary</div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Investment</th><th>Savings</th><th>Donation</th><th>Taxes</th><th>Net</th></tr></thead>
+              <thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Investment</th><th>Savings</th><th>Donation</th><th>Taxes</th><th>Reimburse</th><th>Net</th></tr></thead>
               <tbody id="fy-month-tbody"></tbody>
             </table>
           </div>
@@ -1511,6 +1514,20 @@ const DEFAULT_CATS = {
     'Corporate Tax':[],
     'Capital Gains Tax':['Short Term','Long Term'],
     'Others':[]
+  },
+  Reimbursements: {
+    'Travel Allowance':['Conveyance','Petrol / Fuel','Cab / Auto','Flight','Train','Hotel','Local Travel'],
+    'Food Allowance':['Meal Vouchers','Food Coupons','Cafeteria','Team Lunch / Dinner'],
+    'Mobile & Internet':['Mobile Bill','Internet Bill','Data Card'],
+    'HRA (House Rent)':['Rent Reimbursement','PG / Hostel'],
+    'Medical Allowance':['Medical Bills','Health Check-up','Medicines'],
+    'Uniform Allowance':['Clothing','Uniform','Safety Gear'],
+    'Education Allowance':["Children's Education",'Training','Certification'],
+    'LTA (Leave Travel)':['Domestic Travel','International Travel'],
+    'Performance Bonus':['Incentive','Variable Pay','Commission'],
+    'Project Allowance':['Site Allowance','Special Project','Overtime'],
+    'Gift & Awards':['Company Gift','Achievement Award','Festival Bonus'],
+    'Others':[]
   }
 };
 let CATS = JSON.parse(JSON.stringify(DEFAULT_CATS)); // mutable copy
@@ -1549,7 +1566,7 @@ loadCats();
 
 const PIE_COLORS = ['#E24B4A','#EF9F27','#2563EB','#7C3AED','#16A34A','#0891B2','#D97706','#DB2777','#059669','#9333EA','#DC2626','#F59E0B'];
 const BADGE_CLASSES = { Income:'badge-Income', Expenses:'badge-Expenses', Investment:'badge-Investment', Savings:'badge-Savings', Donation:'badge-Donation', Taxes:'badge-Taxes' };
-const TYPE_COLORS = { Income:'#16A34A', Expenses:'#DC2626', Investment:'#2563EB', Savings:'#7C3AED', Donation:'#D97706', Taxes:'#B91C1C' };
+const TYPE_COLORS = { Income:'#16A34A', Expenses:'#DC2626', Investment:'#2563EB', Savings:'#7C3AED', Donation:'#D97706', Taxes:'#B91C1C', Reimbursements:'#15803D' };
 
 const SUPA_URL = 'https://mbmrzyhcjivrbiaayiah.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ibXJ6eWhjaml2cmJpYWF5aWFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NDc4NDIsImV4cCI6MjA5NjIyMzg0Mn0.ozK0aUNvYfogJeLVnwkgGjBxGtHI_xl2f0P22GiTgAU';
@@ -1889,8 +1906,9 @@ function showPage(id) {
 // ===================== CATEGORIES =====================
 function populateCats() {
   const sel = document.getElementById('t-cat');
-  // Ensure Taxes exists in CATS
+  // Ensure Taxes and Reimbursements exist in CATS
   if (!CATS['Taxes']) CATS['Taxes'] = DEFAULT_CATS['Taxes'];
+  if (!CATS['Reimbursements']) CATS['Reimbursements'] = DEFAULT_CATS['Reimbursements'];
 
   if (currentType === 'Savings') {
     // Use real bank names as categories
@@ -2007,6 +2025,7 @@ function setType(t) {
     if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'"+t+"'")) {
       if (t === 'Transfer') b.className = 'type-tab active-Transfer';
       else if (t === 'Taxes') b.className = 'type-tab active-Taxes';
+      else if (t === 'Reimbursements') b.className = 'type-tab active-Reimbursements';
       else b.className = 'type-tab active-' + t;
     }
   });
@@ -2411,6 +2430,7 @@ function renderDashboard() {
     <div class="metric"><div class="m-label">Investment</div><div class="m-value m-invest">${fmt(tots.Investment)}</div></div>
     <div class="metric"><div class="m-label">Savings</div><div class="m-value m-save">${fmt(tots.Savings)}</div></div>
     <div class="metric"><div class="m-label">Taxes</div><div class="m-value" style="color:#B91C1C;">${fmt(tots.Taxes)}</div></div>
+    <div class="metric"><div class="m-label">Reimbursements</div><div class="m-value" style="color:#15803D;">${fmt(tots.Reimbursements)}</div></div>
     <div class="metric"><div class="m-label">Net cash</div><div class="m-value ${net>=0?'m-net-pos':'m-net-neg'}">${fmt(net)}</div></div>
   `;
 
@@ -2796,10 +2816,10 @@ function renderFY() {
   });
   if (scope === 'me') data = data.filter(t => t.userId === currentUser.id);
 
-  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0 };
+  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0, Reimbursements:0 };
   data.forEach(t => tots[t.type] = (tots[t.type]||0) + t.amount);
-  const net = tots.Income - tots.Expenses - tots.Investment - tots.Savings - tots.Donation - tots.Taxes;
-  const savingsRate = tots.Income > 0 ? Math.round((tots.Income - tots.Expenses - tots.Taxes) / tots.Income * 100) : 0;
+  const net = tots.Income - tots.Expenses - tots.Investment - tots.Savings - tots.Donation - tots.Taxes + (tots.Reimbursements||0);
+  const savingsRate = tots.Income > 0 ? Math.round((tots.Income - tots.Expenses - tots.Taxes + tots.Reimbursements) / tots.Income * 100) : 0;
 
   document.getElementById('fy-metrics').innerHTML = `
     <div class="metric"><div class="m-label">Total Income</div><div class="m-value m-income">${fmt(tots.Income)}</div><div class="m-sub">${fy.label}</div></div>
@@ -2807,6 +2827,7 @@ function renderFY() {
     <div class="metric"><div class="m-label">Total Investment</div><div class="m-value m-invest">${fmt(tots.Investment)}</div></div>
     <div class="metric"><div class="m-label">Total Savings</div><div class="m-value m-save">${fmt(tots.Savings)}</div></div>
     <div class="metric"><div class="m-label">Total Taxes</div><div class="m-value" style="color:#B91C1C;">${fmt(tots.Taxes)}</div></div>
+    <div class="metric"><div class="m-label">Reimbursements</div><div class="m-value" style="color:#15803D;">${fmt(tots.Reimbursements)}</div></div>
     <div class="metric"><div class="m-label">Net Balance</div><div class="m-value ${net>=0?'m-net-pos':'m-net-neg'}">${fmt(net)}</div></div>
     <div class="metric"><div class="m-label">Savings Rate</div><div class="m-value ${savingsRate>=20?'m-income':'m-expense'}">${savingsRate}%</div><div class="m-sub">of income</div></div>
   `;
@@ -2853,9 +2874,9 @@ function renderFY() {
   let totalRow = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0 };
   tbody.innerHTML = months.map(m => {
     const md = data.filter(t=>t.date.startsWith(m));
-    const r = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0 };
+    const r = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0, Reimbursements:0 };
     md.forEach(t => { r[t.type]=(r[t.type]||0)+t.amount; totalRow[t.type]=(totalRow[t.type]||0)+t.amount; });
-    const mnet = r.Income - r.Expenses - r.Investment - r.Savings - r.Donation - r.Taxes;
+    const mnet = r.Income - r.Expenses - r.Investment - r.Savings - r.Donation - r.Taxes + (r.Reimbursements||0);
     const [y,mo] = m.split('-');
     const mLabel = new Date(y,mo-1).toLocaleString('default',{month:'long',year:'numeric'});
     const hasData = Object.values(r).some(v=>v>0);
@@ -2867,6 +2888,7 @@ function renderFY() {
       <td style="color:var(--purple);">${r.Savings?fmt(r.Savings):'—'}</td>
       <td style="color:var(--amber);">${r.Donation?fmt(r.Donation):'—'}</td>
       <td style="color:#B91C1C;">${r.Taxes?fmt(r.Taxes):'—'}</td>
+      <td style="color:#15803D;">${r.Reimbursements?fmt(r.Reimbursements):'—'}</td>
       <td class="${mnet>=0?'amt-pos':'amt-neg'}">${fmt(mnet)}</td>
     </tr>`;
   }).join('') + `<tr style="font-weight:700;background:var(--bg);">
@@ -2906,7 +2928,7 @@ function getFYTotals(fy, scope) {
     return m >= fy.start && m <= fy.end;
   });
   if (scope === 'me') data = data.filter(t => t.userId === currentUser.id);
-  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0 };
+  const tots = { Income:0, Expenses:0, Investment:0, Savings:0, Donation:0, Taxes:0, Reimbursements:0 };
   data.forEach(t => tots[t.type] = (tots[t.type]||0) + t.amount);
   return tots;
 }
